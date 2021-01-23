@@ -44,43 +44,12 @@ namespace Win32.CodeGen
 
                 var sw = Stopwatch.StartNew();
                 using var metadataStream = File.OpenRead(Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location!)!, "Windows.Win32.winmd"));
-                using var generator = new Generator(
-                    metadataStream,
-                    new GeneratorOptions
-                    {
-                        WideCharOnly = true,
-                        EmitSingleFile = true,
-                    },
-                    parseOptions: CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.CSharp9));
-                Console.WriteLine("Generating code... (press Ctrl+C to cancel)");
-                if (args.Length > 0)
-                {
-                    foreach (string name in args)
-                    {
-                        cts.Token.ThrowIfCancellationRequested();
-                        if (!generator.TryGenerate(name, cts.Token))
-                        {
-                            Console.Error.WriteLine("WARNING: No match for " + name);
-                        }
-                    }
-                }
-                else
-                {
-                    generator.GenerateAll(cts.Token);
-                }
 
-                Console.WriteLine("Gathering source files...");
-                var compilationUnits = generator.GetCompilationUnits(cts.Token);
-                Console.WriteLine("Emitting source files...");
-                compilationUnits.AsParallel().WithCancellation(cts.Token).ForAll(unit =>
-                {
-                    string outputPath = Path.Combine(outputDirectory, unit.Key);
-                    Console.WriteLine("Writing output file: {0}", outputPath);
-                    using var generatedSourceStream = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.Read);
-                    using var generatedSourceWriter = new StreamWriter(generatedSourceStream, Encoding.UTF8);
-                    unit.Value.WriteTo(generatedSourceWriter);
-                });
-
+                string outputPath = Path.Combine(outputDirectory, "win32.zig");
+                Console.WriteLine("output file: {0}", outputPath);
+                using var generatedSourceStream = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.Read);
+                using var generatedSourceWriter = new StreamWriter(generatedSourceStream, Encoding.UTF8);
+                ZigGenerator.Generate(cts.Token, generatedSourceWriter, metadataStream);
                 Console.WriteLine("Generation time: {0}", sw.Elapsed);
             }
             catch (OperationCanceledException oce) when (oce.CancellationToken == cts.Token)

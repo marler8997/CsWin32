@@ -55,5 +55,4 @@
     <ProjectReference Include="..\..\src\ScrapeDocs\ScrapeDocs.csproj" ReferenceOutputAssembly="false" OutputItemType="ScraperTool" SetTargetFramework="TargetFramework=net5.0" />
   </ItemGroup>
 
-  <Import Project="$(MSBuildProjectName).targets" />
 </Project>
