@@ -35,8 +35,19 @@ From "Powershell Core" (pwsh), run the `init.ps1` script to install any dependen
 ```
 # from the Powershell Core console that was setup above
 cd zig
+
 # build with
 dotnet build
-# run with
+
+# run with (also builds)
 dotnet run
+
+# run but only generate code from the metadata that matches the given filters:
+dotnet run [FILTERS...]
+# i.e. you can specify methods/types/constants
+dotnet run CreateFile
+dotnet run WNDCLASS
+dotnet run WS_OVERLAPPEDWINDOW
+# supposedly you can also specify an api or module with Name.*, but I haven't found an example that works yet
+
 ```

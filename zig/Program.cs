@@ -11,7 +11,7 @@ namespace Win32.CodeGen
     using System.Text;
     using System.Threading;
     using Microsoft.CodeAnalysis.CSharp;
-    using Microsoft.Windows.CsWin32;
+    using ZigWin32;
 
     internal class Program
     {
