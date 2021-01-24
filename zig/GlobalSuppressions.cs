@@ -51,3 +51,8 @@ using System.Diagnostics.CodeAnalysis;
     "CA1305:Specify IFormatProvider",
     Justification = "English only?",
     Scope = "module")]
+[assembly: SuppressMessage(
+    "StyleCop.CSharp.OrderingRules",
+    "SA1201:Elements should appear in the correct order",
+    Justification = "Meh",
+    Scope = "module")]
