@@ -8,6 +8,8 @@ namespace Win32.CodeGen
     using System.IO;
     using System.Linq;
     using System.Reflection;
+    using System.Reflection.Metadata;
+    using System.Reflection.PortableExecutable;
     using System.Text;
     using System.Threading;
     using Microsoft.CodeAnalysis.CSharp;
@@ -30,8 +32,9 @@ namespace Win32.CodeGen
                 CleanDir(output_dir);
                 var generate_stopwatch = Stopwatch.StartNew();
                 using var metadata_stream = File.OpenRead(Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location!)!, "Windows.Win32.winmd"));
+                using PEReader pe_reader = new PEReader(metadata_stream);
                 Console.WriteLine("output file: {0}", output_dir);
-                ZigGenerator.Generate(metadata_stream, output_dir, cts.Token);
+                ZigGenerator.Generate(pe_reader.GetMetadataReader(), output_dir, cts.Token);
                 Console.WriteLine("Generation time: {0}", generate_stopwatch.Elapsed);
             }
             catch (OperationCanceledException oce) when (oce.CancellationToken == cts.Token)
