@@ -15,7 +15,7 @@ namespace Win32.CodeGen
 
     internal class Program
     {
-        private static void Main(string[] args)
+        private static void Main()
         {
             using var cts = new CancellationTokenSource();
             Console.CancelKeyPress += (s, e) =>
@@ -24,9 +24,6 @@ namespace Win32.CodeGen
                 cts.Cancel();
                 e.Cancel = true;
             };
-
-            Console.WriteLine("Initializing generator...");
-
             try
             {
                 string outputDirectory = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!, "output");
@@ -49,7 +46,7 @@ namespace Win32.CodeGen
                 Console.WriteLine("output file: {0}", outputPath);
                 using var generatedSourceStream = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.Read);
                 using var generatedSourceWriter = new StreamWriter(generatedSourceStream, Encoding.UTF8);
-                ZigGenerator.Generate(cts.Token, generatedSourceWriter, metadataStream);
+                ZigGenerator.Generate(generatedSourceWriter, metadataStream, cts.Token);
                 Console.WriteLine("Generation time: {0}", sw.Elapsed);
             }
             catch (OperationCanceledException oce) when (oce.CancellationToken == cts.Token)
