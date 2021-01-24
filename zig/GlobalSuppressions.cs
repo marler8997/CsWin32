@@ -56,3 +56,6 @@ using System.Diagnostics.CodeAnalysis;
     "SA1201:Elements should appear in the correct order",
     Justification = "Meh",
     Scope = "module")]
+[assembly: SuppressMessage("StyleCop.CSharp.NamingRules", "SA1300:Element should begin with upper-case letter", Justification = "This code will be ported to Zig", Scope = "module")]
+[assembly: SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1602:Enumeration items should be documented", Justification = "Maybe later", Scope = "module")]
+[assembly: SuppressMessage("StyleCop.CSharp.LayoutRules", "SA1513:Closing brace should be followed by blank line", Justification = "This code will be ported to Zig and I don't think this is a Zig convention", Scope = "module")]
