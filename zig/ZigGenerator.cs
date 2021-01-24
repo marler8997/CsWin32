@@ -1,21 +1,31 @@
+using System;
+using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
+using System.Runtime.CompilerServices;
+using System.Text;
+using System.Threading;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+
 #pragma warning disable CS1591 // Missing XML comment for publicly visible type or member
-#pragma warning disable SA1306 // Field names should begin with lower-case letter
-namespace ZigWin32
+
+public static partial class ZigWin32
 {
-    using System;
-    using System.Collections.Generic;
-    using System.Collections.Immutable;
-    using System.Diagnostics;
-    using System.Diagnostics.CodeAnalysis;
-    using System.IO;
-    using System.Linq;
-    using System.Reflection;
-    using System.Reflection.Metadata;
-    using System.Reflection.PortableExecutable;
-    using System.Runtime.CompilerServices;
-    using System.Text;
-    using System.Threading;
-    using Microsoft.CodeAnalysis.CSharp.Syntax;
+    private static readonly Dictionary<string, string> zig_keyword_id_map = new Dictionary<string, string>();
+
+    static ZigWin32()
+    {
+        foreach (string keyword in ZigLanguageData.keywords)
+        {
+            zig_keyword_id_map.Add(keyword, string.Format("@\"{0}\"", keyword));
+        }
+    }
 
     public class ZigGenerator
     {
@@ -207,7 +217,7 @@ test """" {
             // TypeGenInfo containingTypeInfo = this.GetTypeGenInfo(fieldDef.GetDeclaringType());
             string name = this.mr.GetString(fieldDef.Name);
             Constant constant = this.mr.GetConstant(fieldDef.GetDefaultValue());
-            ZigConstAssign assign = constant.ToZigConstAssign(this.mr);
+            var assign = toZigConstAssign(constant, this.mr);
             if (assign.optional_type == null)
             {
                 out_file.WriteLine("pub const {0} = {1};", name, assign.literal);
@@ -304,7 +314,7 @@ test """" {
             {
                 FieldDefinition field_def = this.mr.GetFieldDefinition(field_def_handle);
                 Api.AddedTypeRef field_type_ref = api.addTypeRef(field_def.DecodeSignature(this.type_ref_decoder, null));
-                out_file.WriteLine("    {0}: *opaque{{}}, // {1}", this.mr.GetString(field_def.Name).escapeZigId(), field_type_ref.zig_str);
+                out_file.WriteLine("    {0}: *opaque{{}}, // {1}", escapeZigId(this.mr.GetString(field_def.Name)), field_type_ref.zig_str);
             }
             out_file.WriteLine("};");
         }
@@ -364,79 +374,64 @@ test """" {
         }
     }
 
-    internal static class GenUtil
+    private static string escapeZigId(string id)
     {
-        private static readonly Dictionary<string, string> zig_keyword_id_map = new Dictionary<string, string>();
-
-        static GenUtil()
+        string? zig_id;
+        if (zig_keyword_id_map.TryGetValue(id, out zig_id))
         {
-            foreach (string keyword in ZigLanguageData.keywords)
-            {
-                zig_keyword_id_map.Add(keyword, string.Format("@\"{0}\"", keyword));
-            }
+            return zig_id;
+        }
+        return id;
+    }
+
+    private static ZigConstAssign toZigConstAssign(Constant constant, MetadataReader mr)
+    {
+        return toZigConstAssignImpl(constant.TypeCode, mr.GetBlobReader(constant.Value));
+    }
+
+    private static ZigConstAssign toZigConstAssignImpl(ConstantTypeCode typeCode, BlobReader blobReader)
+    {
+        return typeCode switch
+        {
+            ConstantTypeCode.Boolean => blobReader.ReadBoolean() ? new ZigConstAssign("true") : new ZigConstAssign("false"),
+            ConstantTypeCode.Char => new ZigConstAssign(string.Format("'{0}'", blobReader.ReadChar())),
+            ConstantTypeCode.SByte => new ZigConstAssign(string.Format("{0}", blobReader.ReadSByte()), "i8"),
+            ConstantTypeCode.Byte => new ZigConstAssign(string.Format("{0}", blobReader.ReadByte()), "u8"),
+            ConstantTypeCode.Int16 => new ZigConstAssign(string.Format("{0}", blobReader.ReadInt16()), "i16"),
+            ConstantTypeCode.UInt16 => new ZigConstAssign(string.Format("{0}", blobReader.ReadUInt16()), "u16"),
+            ConstantTypeCode.Int32 => new ZigConstAssign(string.Format("{0}", blobReader.ReadInt32()), "i32"),
+            ConstantTypeCode.UInt32 => new ZigConstAssign(string.Format("{0}", blobReader.ReadUInt32()), "u32"),
+            ConstantTypeCode.Int64 => new ZigConstAssign(string.Format("{0}", blobReader.ReadInt64()), "i64"),
+            ConstantTypeCode.UInt64 => new ZigConstAssign(string.Format("{0}", blobReader.ReadUInt64()), "u64"),
+            ConstantTypeCode.Single => GetSingle(blobReader.ReadSingle()),
+            ConstantTypeCode.Double => GetDouble(blobReader.ReadDouble()),
+            ConstantTypeCode.String => GetString(blobReader.ReadConstant(ConstantTypeCode.String)),
+            ConstantTypeCode.NullReference => new ZigConstAssign("null"),
+            _ => throw new NotSupportedException("ConstantTypeCode not supported: " + typeCode),
+        };
+        static ZigConstAssign GetString(object? obj)
+        {
+            return obj is string value ?
+                new ZigConstAssign(string.Format("\"{0}\"", value)) :
+                throw new Exception(string.Format("String constant is not a string? it is: {0}", obj));
         }
 
-        public static string escapeZigId(this string id)
+        static ZigConstAssign GetSingle(float value)
         {
-            string? zig_id;
-            if (zig_keyword_id_map.TryGetValue(id, out zig_id))
-            {
-                return zig_id;
-            }
-            return id;
+            return
+                float.IsPositiveInfinity(value) ? new ZigConstAssign("@import(\"std\").math.inf(f32)") :
+                float.IsNegativeInfinity(value) ? new ZigConstAssign("-@import(\"std\").math.inf(f32)") :
+                float.IsNaN(value) ? new ZigConstAssign("@import(\"std\").math.nan(f32)") :
+                new ZigConstAssign(string.Format("{0}", value), "f32");
         }
 
-        public static ZigConstAssign ToZigConstAssign(this Constant constant, MetadataReader mr)
+        static ZigConstAssign GetDouble(double value)
         {
-            return constant.TypeCode.ToZigConstAssign(mr.GetBlobReader(constant.Value));
-        }
-
-        public static ZigConstAssign ToZigConstAssign(this ConstantTypeCode typeCode, BlobReader blobReader)
-        {
-            return typeCode switch
-            {
-#pragma warning disable SA1025 // Code should not contain multiple whitespace in a row
-                ConstantTypeCode.Boolean => blobReader.ReadBoolean() ? new ZigConstAssign("true") : new ZigConstAssign("false"),
-                ConstantTypeCode.Char => new ZigConstAssign(string.Format("'{0}'", blobReader.ReadChar())),
-                ConstantTypeCode.SByte => new ZigConstAssign(string.Format("{0}", blobReader.ReadSByte()), "i8"),
-                ConstantTypeCode.Byte => new ZigConstAssign(string.Format("{0}", blobReader.ReadByte()), "u8"),
-                ConstantTypeCode.Int16 => new ZigConstAssign(string.Format("{0}", blobReader.ReadInt16()), "i16"),
-                ConstantTypeCode.UInt16 => new ZigConstAssign(string.Format("{0}", blobReader.ReadUInt16()), "u16"),
-                ConstantTypeCode.Int32 => new ZigConstAssign(string.Format("{0}", blobReader.ReadInt32()), "i32"),
-                ConstantTypeCode.UInt32 => new ZigConstAssign(string.Format("{0}", blobReader.ReadUInt32()), "u32"),
-                ConstantTypeCode.Int64 => new ZigConstAssign(string.Format("{0}", blobReader.ReadInt64()), "i64"),
-                ConstantTypeCode.UInt64 => new ZigConstAssign(string.Format("{0}", blobReader.ReadUInt64()), "u64"),
-                ConstantTypeCode.Single => GetSingle(blobReader.ReadSingle()),
-                ConstantTypeCode.Double => GetDouble(blobReader.ReadDouble()),
-                ConstantTypeCode.String => GetString(blobReader.ReadConstant(ConstantTypeCode.String)),
-                ConstantTypeCode.NullReference => new ZigConstAssign("null"),
-#pragma warning restore SA1025 // Code should not contain multiple whitespace in a row
-                _ => throw new NotSupportedException("ConstantTypeCode not supported: " + typeCode),
-            };
-            static ZigConstAssign GetString(object? obj)
-            {
-                return obj is string value ?
-                    new ZigConstAssign(string.Format("\"{0}\"", value)) :
-                    throw new Exception(string.Format("String constant is not a string? it is: {0}", obj));
-            }
-
-            static ZigConstAssign GetSingle(float value)
-            {
-                return
-                    float.IsPositiveInfinity(value) ? new ZigConstAssign("@import(\"std\").math.inf(f32)") :
-                    float.IsNegativeInfinity(value) ? new ZigConstAssign("-@import(\"std\").math.inf(f32)") :
-                    float.IsNaN(value) ? new ZigConstAssign("@import(\"std\").math.nan(f32)") :
-                    new ZigConstAssign(string.Format("{0}", value), "f32");
-            }
-
-            static ZigConstAssign GetDouble(double value)
-            {
-                return
-                    double.IsPositiveInfinity(value) ? new ZigConstAssign("@import(\"std\").math.inf(f64)") :
-                    double.IsNegativeInfinity(value) ? new ZigConstAssign("-@import(\"std\").math.inf(f64)") :
-                    double.IsNaN(value) ? new ZigConstAssign("@import(\"std\").math.nan(f64)") :
-                    new ZigConstAssign(string.Format("{0}", value), "f64");
-            }
+            return
+                double.IsPositiveInfinity(value) ? new ZigConstAssign("@import(\"std\").math.inf(f64)") :
+                double.IsNegativeInfinity(value) ? new ZigConstAssign("-@import(\"std\").math.inf(f64)") :
+                double.IsNaN(value) ? new ZigConstAssign("@import(\"std\").math.nan(f64)") :
+                new ZigConstAssign(string.Format("{0}", value), "f64");
         }
     }
 
@@ -451,11 +446,6 @@ test """" {
             this.def = mr.GetTypeDefinition(handle);
             this.name = mr.GetString(this.def.Name);
             this.@namespace = mr.GetString(this.def.Namespace);
-        }
-
-        public string Zig
-        {
-            get { return this.name; }
         }
     }
 

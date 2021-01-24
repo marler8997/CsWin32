@@ -13,7 +13,6 @@ namespace Win32.CodeGen
     using System.Text;
     using System.Threading;
     using Microsoft.CodeAnalysis.CSharp;
-    using ZigWin32;
 
     internal class Program
     {
@@ -34,7 +33,7 @@ namespace Win32.CodeGen
                 using var metadata_stream = File.OpenRead(Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location!)!, "Windows.Win32.winmd"));
                 using PEReader pe_reader = new PEReader(metadata_stream);
                 Console.WriteLine("output file: {0}", output_dir);
-                ZigGenerator.Generate(pe_reader.GetMetadataReader(), output_dir, cts.Token);
+                ZigWin32.ZigGenerator.Generate(pe_reader.GetMetadataReader(), output_dir, cts.Token);
                 Console.WriteLine("Generation time: {0}", generate_stopwatch.Elapsed);
             }
             catch (OperationCanceledException oce) when (oce.CancellationToken == cts.Token)

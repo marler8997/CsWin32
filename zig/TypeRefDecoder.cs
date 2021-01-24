@@ -1,11 +1,13 @@
-﻿namespace ZigWin32
-{
-    using System;
-    using System.Collections.Generic;
-    using System.Collections.Immutable;
-    using System.Reflection.Metadata;
-    using System.Text;
+﻿using System;
+using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Reflection.Metadata;
+using System.Text;
 
+#pragma warning disable CS1591 // Missing XML comment for publicly visible type or member
+
+public static partial class ZigWin32
+{
     // Implements the ISignatureTypeProvider interface used as a callback by MetadataReader to create objects that represent types.
     internal class TypeRefDecoder : ISignatureTypeProvider<TypeRef, INothing?>
     {

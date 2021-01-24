@@ -65,3 +65,5 @@ using System.Diagnostics.CodeAnalysis;
 [assembly: SuppressMessage("StyleCop.CSharp.NamingRules", "SA1311:Static readonly fields should begin with upper-case letter", Justification = "This code will be ported to Zig", Scope = "module")]
 [assembly: SuppressMessage("StyleCop.CSharp.OrderingRules", "SA1204:Static elements should appear before instance elements", Justification = "This code will be ported to Zig", Scope = "module")]
 [assembly: SuppressMessage("StyleCop.CSharp.OrderingRules", "SA1214:Readonly fields should appear before non-readonly fields", Justification = "This code will be ported to Zig", Scope = "module")]
+[assembly: SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1601:Partial elements should be documented", Justification = "This code will be ported to Zig", Scope = "module")]
+[assembly: SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "This code will be ported to Zig", Scope = "module")]
