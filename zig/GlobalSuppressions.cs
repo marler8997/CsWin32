@@ -17,6 +17,16 @@ using System.Diagnostics.CodeAnalysis;
     Justification = "This code will be ported to Zig",
     Scope = "module")]
 [assembly: SuppressMessage(
+    "StyleCop.CSharp.NamingRules",
+    "SA1307:Accessible fields should begin with upper-case letter",
+    Justification = "This code will be ported to Zig",
+    Scope = "module")]
+[assembly: SuppressMessage(
+    "StyleCop.CSharp.MaintainabilityRules",
+    "SA1402:File may only contain a single type",
+    Justification = "This code will be ported to Zig",
+    Scope = "module")]
+[assembly: SuppressMessage(
     "StyleCop.CSharp.DocumentationRules",
     "SA1600:Elements should be documented",
     Justification = "This code is not meant to be used as a public library",
@@ -27,12 +37,17 @@ using System.Diagnostics.CodeAnalysis;
     Justification = "Meh",
     Scope = "module")]
 [assembly: SuppressMessage(
-    "StyleCop.CSharp.MaintainabilityRules",
-    "SA1402:File may only contain a single type",
-    Justification = "This code will be ported to Zig",
-    Scope = "module")]
-[assembly: SuppressMessage(
     "MicrosoftCodeAnalysisReleaseTracking",
     "RS2008:Enable analyzer release tracking",
     Justification = "Don't know what this is, might revisit later",
+    Scope = "module")]
+[assembly: SuppressMessage(
+    "Globalization",
+    "CA1308:Normalize strings to uppercase",
+    Justification = "I need lowercase",
+    Scope = "module")]
+[assembly: SuppressMessage(
+    "Globalization",
+    "CA1305:Specify IFormatProvider",
+    Justification = "English only?",
     Scope = "module")]

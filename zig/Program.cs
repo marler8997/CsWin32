@@ -26,32 +26,32 @@ namespace Win32.CodeGen
             };
             try
             {
-                string outputDirectory = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!, "output");
-                if (Directory.Exists(outputDirectory))
-                {
-                    foreach (string file in Directory.EnumerateFiles(outputDirectory, "*", SearchOption.AllDirectories))
-                    {
-                        File.Delete(file);
-                    }
-                }
-                else
-                {
-                    Directory.CreateDirectory(outputDirectory);
-                }
-
-                var sw = Stopwatch.StartNew();
-                using var metadataStream = File.OpenRead(Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location!)!, "Windows.Win32.winmd"));
-
-                string outputPath = Path.Combine(outputDirectory, "win32.zig");
-                Console.WriteLine("output file: {0}", outputPath);
-                using var generatedSourceStream = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.Read);
-                using var generatedSourceWriter = new StreamWriter(generatedSourceStream, Encoding.UTF8);
-                ZigGenerator.Generate(generatedSourceWriter, metadataStream, cts.Token);
-                Console.WriteLine("Generation time: {0}", sw.Elapsed);
+                string output_dir = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!, "output");
+                CleanDir(output_dir);
+                var generate_stopwatch = Stopwatch.StartNew();
+                using var metadata_stream = File.OpenRead(Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location!)!, "Windows.Win32.winmd"));
+                Console.WriteLine("output file: {0}", output_dir);
+                ZigGenerator.Generate(metadata_stream, output_dir, cts.Token);
+                Console.WriteLine("Generation time: {0}", generate_stopwatch.Elapsed);
             }
             catch (OperationCanceledException oce) when (oce.CancellationToken == cts.Token)
             {
                 Console.Error.WriteLine("Canceled.");
+            }
+        }
+
+        private static void CleanDir(string dir)
+        {
+            if (Directory.Exists(dir))
+            {
+                foreach (string file in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
+                {
+                    File.Delete(file);
+                }
+            }
+            else
+            {
+                Directory.CreateDirectory(dir);
             }
         }
     }
