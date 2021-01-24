@@ -1,4 +1,5 @@
 #pragma warning disable CS1591 // Missing XML comment for publicly visible type or member
+#pragma warning disable SA1306 // Field names should begin with lower-case letter
 namespace ZigWin32
 {
     using System;
@@ -45,6 +46,75 @@ namespace ZigWin32
                 this.cancel_token.ThrowIfCancellationRequested();
                 this.GenerateConstantIfNotDoneAlready(field_def);
             }
+        }
+
+        internal TypeSyntax? GenerateSafeHandle(string releaseMethod)
+        {
+            this.out_file.WriteLine("// TODO: remove this nonsensical line in ZigGenerator.cs, this is just to disable a warning: {0}", releaseMethod);
+            throw new Exception("Not Implemented releaseMethod");
+        }
+
+        internal bool TryGetHandleReleaseMethod(string handleStructName, [NotNullWhen(true)] out string? releaseMethod)
+        {
+            releaseMethod = null; // TODO: remove this!!!!!
+            this.out_file.WriteLine("// TODO: remove this nonsensical line in ZigGenerator.cs, this is just to disable a warning: {0}", handleStructName);
+            throw new Exception("Not Implemented");
+
+            // return this.handleTypeReleaseMethod.TryGetValue(handleStructName, out releaseMethod);
+        }
+
+        internal TypeDefinitionHandle? GenerateInteropType(TypeReferenceHandle typeRefHandle)
+        {
+            TypeReference typeRef = this.mr.GetTypeReference(typeRefHandle);
+            throw new Exception("Not Implemented");
+            /*
+            string name = this.mr.GetString(typeRef.Name);
+            if (this.typesByName.TryGetValue(name, out TypeDefinitionHandle typeDefHandle))
+            {
+                this.GenerateInteropType(typeDefHandle);
+                return typeDefHandle;
+            }
+            else
+            {
+                // System.Guid reaches here, but doesn't need to be generated.
+                ////throw new NotSupportedException($"Could not find a type def for: {this.mr.GetString(typeRef.Namespace)}.{name}");
+                return null;
+            }
+            */
+        }
+
+        internal void GenerateInteropType(TypeDefinitionHandle typeDefHandle)
+        {
+            this.out_file.WriteLine("// TODO: remove this nonsensical line in ZigGenerator.cs, this is just to disable a warning: {0}", typeDefHandle);
+            throw new Exception("Not Implemented");
+            /*
+            if (this.nestedToDeclaringLookup.TryGetValue(typeDefHandle, out TypeDefinitionHandle nestingParentHandle))
+            {
+                // We should only generate this type into its parent type.
+                this.GenerateInteropType(nestingParentHandle);
+                return;
+            }
+
+            if (!this.typesGenerating.Add(typeDefHandle))
+            {
+                return;
+            }
+
+            // https://github.com/microsoft/CsWin32/issues/31
+            TypeDefinition typeDef = this.mr.GetTypeDefinition(typeDefHandle);
+            if (this.typesByName.TryGetValue(this.mr.GetString(typeDef.Name), out TypeDefinitionHandle expectedHandle) && !expectedHandle.Equals(typeDefHandle))
+            {
+                // Skip generating types with conflicting names till we fix that issue.
+                return;
+            }
+
+            MemberDeclarationSyntax? typeDeclaration = this.CreateInteropType(typeDefHandle);
+
+            if (typeDeclaration is object)
+            {
+                this.types.Add(typeDefHandle, typeDeclaration);
+            }
+            */
         }
 
         private void GenerateConstantIfNotDoneAlready(FieldDefinitionHandle field_def)
@@ -104,72 +174,6 @@ namespace ZigWin32
                 string? ns = this.mr.GetString(typeDef.Namespace);
                 throw new GenerationFailedException($"Failed creating field: {ns}.{typeName}.{name}", ex);
             }
-        }
-
-        internal TypeSyntax? GenerateSafeHandle(string releaseMethod)
-        {
-            throw new Exception("Not Implemented");
-        }
-
-        internal bool TryGetHandleReleaseMethod(string handleStructName, [NotNullWhen(true)] out string? releaseMethod)
-        {
-            throw new Exception("Not Implemented");
-            /*
-            return this.handleTypeReleaseMethod.TryGetValue(handleStructName, out releaseMethod);
-            */
-        }
-
-        internal TypeDefinitionHandle? GenerateInteropType(TypeReferenceHandle typeRefHandle)
-        {
-            throw new Exception("Not Implemented");
-            /*
-            TypeReference typeRef = this.mr.GetTypeReference(typeRefHandle);
-            string name = this.mr.GetString(typeRef.Name);
-            if (this.typesByName.TryGetValue(name, out TypeDefinitionHandle typeDefHandle))
-            {
-                this.GenerateInteropType(typeDefHandle);
-                return typeDefHandle;
-            }
-            else
-            {
-                // System.Guid reaches here, but doesn't need to be generated.
-                ////throw new NotSupportedException($"Could not find a type def for: {this.mr.GetString(typeRef.Namespace)}.{name}");
-                return null;
-            }
-            */
-        }
-
-        internal void GenerateInteropType(TypeDefinitionHandle typeDefHandle)
-        {
-            throw new Exception("Not Implemented");
-            /*
-            if (this.nestedToDeclaringLookup.TryGetValue(typeDefHandle, out TypeDefinitionHandle nestingParentHandle))
-            {
-                // We should only generate this type into its parent type.
-                this.GenerateInteropType(nestingParentHandle);
-                return;
-            }
-
-            if (!this.typesGenerating.Add(typeDefHandle))
-            {
-                return;
-            }
-
-            // https://github.com/microsoft/CsWin32/issues/31
-            TypeDefinition typeDef = this.mr.GetTypeDefinition(typeDefHandle);
-            if (this.typesByName.TryGetValue(this.mr.GetString(typeDef.Name), out TypeDefinitionHandle expectedHandle) && !expectedHandle.Equals(typeDefHandle))
-            {
-                // Skip generating types with conflicting names till we fix that issue.
-                return;
-            }
-
-            MemberDeclarationSyntax? typeDeclaration = this.CreateInteropType(typeDefHandle);
-
-            if (typeDeclaration is object)
-            {
-                this.types.Add(typeDefHandle, typeDeclaration);
-            }
-            */
         }
     }
 }

@@ -1,8 +1,4 @@
-﻿// This file is used by Code Analysis to maintain SuppressMessage
-// attributes that are applied to this project.
-// Project-level suppressions either have no target or are given
-// a specific target and scoped to a namespace, type, member, etc.
-
+﻿#pragma warning disable SA1636 // File header copyright text should match
 using System.Diagnostics.CodeAnalysis;
 
 [assembly: SuppressMessage(
@@ -24,4 +20,19 @@ using System.Diagnostics.CodeAnalysis;
     "StyleCop.CSharp.DocumentationRules",
     "SA1600:Elements should be documented",
     Justification = "This code is not meant to be used as a public library",
+    Scope = "module")]
+[assembly: SuppressMessage(
+    "StyleCop.CSharp.DocumentationRules",
+    "SA1633:File should have header",
+    Justification = "Meh",
+    Scope = "module")]
+[assembly: SuppressMessage(
+    "StyleCop.CSharp.MaintainabilityRules",
+    "SA1402:File may only contain a single type",
+    Justification = "This code will be ported to Zig",
+    Scope = "module")]
+[assembly: SuppressMessage(
+    "MicrosoftCodeAnalysisReleaseTracking",
+    "RS2008:Enable analyzer release tracking",
+    Justification = "Don't know what this is, might revisit later",
     Scope = "module")]

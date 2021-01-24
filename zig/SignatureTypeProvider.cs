@@ -170,7 +170,6 @@ namespace ZigWin32
     {
     }
 
-
     internal class ZigSignatureTypeProvider : ISignatureTypeProvider<TypeSyntax, IGenericContext?>
     {
         private readonly ZigGenerator owner;

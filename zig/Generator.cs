@@ -642,7 +642,9 @@ namespace ZigWin32
 
         internal bool TryGetHandleReleaseMethod(string handleStructName, [NotNullWhen(true)] out string? releaseMethod)
         {
+#pragma warning disable CS8762 // Parameter must have a non-null value when exiting in some condition.
             return this.handleTypeReleaseMethod.TryGetValue(handleStructName, out releaseMethod);
+#pragma warning restore CS8762 // Parameter must have a non-null value when exiting in some condition.
         }
 
         internal void GenerateAllInteropTypes(CancellationToken cancellationToken)
@@ -1185,12 +1187,12 @@ namespace ZigWin32
                             docCommentsBuilder.Append("/// ");
                         }
 
-                        if (paramDocLine.IndexOf("<table", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                            paramDocLine.IndexOf("<img", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                            paramDocLine.IndexOf("<ul", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                            paramDocLine.IndexOf("<ol", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                            paramDocLine.IndexOf("```", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                            paramDocLine.IndexOf("<<", StringComparison.OrdinalIgnoreCase) >= 0)
+                        if (paramDocLine.Contains("<table", StringComparison.OrdinalIgnoreCase) ||
+                            paramDocLine.Contains("<img", StringComparison.OrdinalIgnoreCase) ||
+                            paramDocLine.Contains("<ul", StringComparison.OrdinalIgnoreCase) ||
+                            paramDocLine.Contains("<ol", StringComparison.OrdinalIgnoreCase) ||
+                            paramDocLine.Contains("```", StringComparison.OrdinalIgnoreCase) ||
+                            paramDocLine.Contains("<<", StringComparison.OrdinalIgnoreCase))
                         {
                             // We don't try to format tables, so truncate at this point.
                             if (inParagraph)
