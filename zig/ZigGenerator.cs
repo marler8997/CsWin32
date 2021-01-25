@@ -1,17 +1,11 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using System.IO;
-using System.Linq;
 using System.Reflection;
 using System.Reflection.Metadata;
-using System.Reflection.PortableExecutable;
-using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 #pragma warning disable CS1591 // Missing XML comment for publicly visible type or member
 
