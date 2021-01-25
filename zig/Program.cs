@@ -48,6 +48,11 @@ namespace Win32.CodeGen
             {
                 foreach (string file in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
                 {
+                    // hack to allow me to publish to a git repo
+                    if (file.Contains("\\.git\\"))
+                    {
+                        continue;
+                    }
                     File.Delete(file);
                 }
             }

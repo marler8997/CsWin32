@@ -134,11 +134,11 @@ test """" {
                     out_file.WriteLine(@"pub const {0} = @import(""api/{1}"");", api.name_lower, api.base_filename);
                 }
 
-                out_file.WriteLine(@"test """" {{");
+                out_file.WriteLine(@"test """" {");
                 out_file.WriteLine(@"    const api_count = {0};", generator.api_namespace_map.Count);
                 out_file.WriteLine(@"    @setEvalBranchQuota(api_count);");
                 out_file.WriteLine(@"    @import(""std"").testing.refAllDecls(@This());");
-                out_file.WriteLine(@"}}");
+                out_file.WriteLine(@"}");
             }
         }
 
@@ -212,13 +212,13 @@ test """" {
             }
 
             out_file.WriteLine();
-            out_file.WriteLine("test \"\" {{");
+            out_file.WriteLine("test \"\" {");
             out_file.WriteLine("    const constant_export_count = {0};", const_count);
             out_file.WriteLine("    const type_export_count = {0};", type_count);
             out_file.WriteLine("    const type_import_count = {0};", type_import_count);
             out_file.WriteLine("    @setEvalBranchQuota(constant_export_count + type_export_count + type_import_count + 2); // TODO: why do I need these extra 2?");
             out_file.WriteLine("    @import(\"std\").testing.refAllDecls(@This());");
-            out_file.WriteLine("}}");
+            out_file.WriteLine("}");
         }
 
         void GenerateConstant(StreamWriter out_file, FieldDefinitionHandle fieldDefHandle)
