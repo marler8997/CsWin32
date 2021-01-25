@@ -194,7 +194,15 @@ test """" {
                     }
                     else
                     {
-                        out_file.WriteLine("const {0} = *opaque{{}}; // TODO: import it", type_ref.name);
+                        if (type_ref.@namespace.Length == 0)
+                        {
+                            out_file.WriteLine("const {0} = *opaque{{}}; // cannot import because it has no namesapce (pretty sure this is an issue in win32metadata)", type_ref.name);
+                        }
+                        else
+                        {
+                            Api import_api = this.api_namespace_map[type_ref.@namespace];
+                            out_file.WriteLine("const {0} = @import(\"{1}\").{0};", type_ref.name, import_api.base_filename);
+                        }
                         type_import_count += 1;
                     }
                 }
