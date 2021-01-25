@@ -83,7 +83,7 @@ public static partial class ZigWin32
 
         public TypeRef GetTypeFromDefinition(MetadataReader mr, TypeDefinitionHandle handle, byte rawTypeKind)
         {
-            return new CustomTypeRef(this.type_map[handle]);
+            return new UserTypeRef(this.type_map[handle]);
         }
 
         public TypeRef GetTypeFromReference(MetadataReader mr, TypeReferenceHandle handle, byte rawTypeKind)
@@ -93,7 +93,7 @@ public static partial class ZigWin32
             string name = mr.GetString(type_ref.Name);
             if (@namespace.Length == 0)
             {
-                return new CustomTypeRef(this.no_namespace_type_map[name]);
+                return new UserTypeRef(this.no_namespace_type_map[name]);
             }
 
             // This occurs for System.Guid, not sure if it is supposed to
@@ -107,7 +107,7 @@ public static partial class ZigWin32
             }
 
             Api api = this.api_namespace_map[@namespace];
-            return new CustomTypeRef(api.types[api.type_name_fqn_map[name]]);
+            return new UserTypeRef(api.types[api.type_name_fqn_map[name]]);
         }
 
         public TypeRef GetTypeFromSpecification(MetadataReader mr, INothing? genericContext, TypeSpecificationHandle handle, byte rawTypeKind)
@@ -203,11 +203,11 @@ public static partial class ZigWin32
         }
     }
 
-    class CustomTypeRef : TypeRef
+    class UserTypeRef : TypeRef
     {
         public readonly TypeGenInfo info;
 
-        public CustomTypeRef(TypeGenInfo info)
+        public UserTypeRef(TypeGenInfo info)
         {
             this.info = info;
         }

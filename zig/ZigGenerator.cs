@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Reflection.Metadata;
 using System.Text;
@@ -40,6 +41,7 @@ test """" {
         readonly Dictionary<string, Api> api_namespace_map = new Dictionary<string, Api>();
         readonly Dictionary<TypeDefinitionHandle, TypeGenInfo> type_map = new Dictionary<TypeDefinitionHandle, TypeGenInfo>();
         readonly TypeRefDecoder type_ref_decoder;
+        readonly CustomAttrDecoder custom_attr_decoder;
 
         ZigGenerator(MetadataReader mr, CancellationToken cancel_token)
         {
@@ -92,6 +94,7 @@ test """" {
                 }
             }
             this.type_ref_decoder = new TypeRefDecoder(this.no_namespace_type_map, this.api_namespace_map, this.type_map);
+            this.custom_attr_decoder = new CustomAttrDecoder();
         }
 
         public static void Generate(MetadataReader mr, string out_dir, CancellationToken cancel_token)
@@ -295,7 +298,6 @@ test """" {
 
             /*
              * TODO: look at these Methods on TypeDefinition as well
-            type_info.def.GetCustomAttributes()
             type_info.def.GetDeclarativeSecurityAttributes()
             public EventDefinitionHandleCollection GetEvents();
             public FieldDefinitionHandleCollection GetFields();
@@ -350,6 +352,43 @@ test """" {
                 return;
             }
 
+            string? optional_type_guid = null;
+            bool is_native_typedef = false;
+
+            foreach (CustomAttributeHandle attr_handle in type_info.def.GetCustomAttributes())
+            {
+                BasicTypeAttr attr = this.decodeBasicTypeAttr(this.mr.GetCustomAttribute(attr_handle));
+                if (attr is BasicTypeAttr.Guid guid_attr)
+                {
+                    optional_type_guid = guid_attr.value;
+                }
+                else if (attr is BasicTypeAttr.RaiiFree)
+                {
+                    Console.WriteLine("RaiiFree: {0}", type_info.name);
+                }
+                else if (attr is BasicTypeAttr.NativeTypedef)
+                {
+                    Console.WriteLine("NativeTypedef: {0}", type_info.name);
+                    is_native_typedef = true;
+                }
+                else
+                {
+                    throw new InvalidOperationException();
+                }
+            }
+
+            if (is_native_typedef)
+            {
+                if (type_info.def.GetFields().Count != 1)
+                {
+                    throw new InvalidDataException(string.Format("native typedef '{0}' has fields?", type_info.name));
+                }
+                FieldDefinition target_def = this.mr.GetFieldDefinition(type_info.def.GetFields().First());
+                string target_def_zig = addTypeRef(type_refs, target_def.DecodeSignature(this.type_ref_decoder, null));
+                out_file.WriteLine("pub const {0} = {1};", escapeZigId(type_info.name), target_def_zig);
+                return;
+            }
+
             out_file.WriteLine("// TODO: I think this is a struct, but not sure at this point, assuming it is for now");
             if (type_info.def.GetFields().Count == 0)
             {
@@ -369,6 +408,67 @@ test """" {
                 }
                 out_file.WriteLine("};");
             }
+        }
+
+        BasicTypeAttr decodeBasicTypeAttr(CustomAttribute attr)
+        {
+            NamespaceAndName attr_name = getAttrTypeName(this.mr, attr);
+            CustomAttributeValue<CustomAttrType> attr_args = attr.DecodeValue(this.custom_attr_decoder);
+            if (attr_name.Equals("System.Runtime.InteropServices", "GuidAttribute"))
+            {
+                enforceAttrFixedArgCount(attr_name, attr_args, 1);
+                enforceAttrNamedArgCount(attr_name, attr_args, 0);
+                return new BasicTypeAttr.Guid(attrFixedArgAsString(attr_args.FixedArguments[0]));
+            }
+            if (attr_name.Equals("Windows.Win32.Interop", "RAIIFreeAttribute"))
+            {
+                enforceAttrFixedArgCount(attr_name, attr_args, 1);
+                enforceAttrNamedArgCount(attr_name, attr_args, 0);
+                return new BasicTypeAttr.RaiiFree(attrFixedArgAsString(attr_args.FixedArguments[0]));
+            }
+            if (attr_name.Equals("Windows.Win32.Interop", "NativeTypedefAttribute"))
+            {
+                enforceAttrFixedArgCount(attr_name, attr_args, 0);
+                enforceAttrNamedArgCount(attr_name, attr_args, 0);
+                return new BasicTypeAttr.NativeTypedef();
+            }
+            throw new NotImplementedException(string.Format("uhandled custom attr \"{0}\", \"{1}\"", attr_name.@namespace, attr_name.name));
+        }
+
+        static NamespaceAndName getAttrTypeName(MetadataReader mr, CustomAttribute attr)
+        {
+            if (attr.Constructor.Kind == HandleKind.MemberReference)
+            {
+                MemberReference member_ref = mr.GetMemberReference((MemberReferenceHandle)attr.Constructor);
+                TypeReference parent_ref = mr.GetTypeReference((TypeReferenceHandle)member_ref.Parent);
+                return new NamespaceAndName(mr.GetString(parent_ref.Namespace), mr.GetString(parent_ref.Name));
+            }
+
+            if (attr.Constructor.Kind == HandleKind.MethodDefinition)
+            {
+                MethodDefinition method_def = mr.GetMethodDefinition((MethodDefinitionHandle)attr.Constructor);
+                TypeDefinition type_def = mr.GetTypeDefinition(method_def.GetDeclaringType());
+                return new NamespaceAndName(mr.GetString(type_def.Namespace), mr.GetString(type_def.Name));
+            }
+
+            throw new InvalidDataException("Unsupported attribute constructor kind: " + attr.Constructor.Kind);
+        }
+    }
+
+    struct NamespaceAndName
+    {
+        public readonly string @namespace;
+        public readonly string name;
+
+        public NamespaceAndName(string @namespace, string name)
+        {
+            this.@namespace = @namespace;
+            this.name = name;
+        }
+
+        public bool Equals(string @namespace, string name)
+        {
+            return this.name == name && this.@namespace == @namespace;
         }
     }
 
