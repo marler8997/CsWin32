@@ -116,11 +116,21 @@ public static partial class ZigWin32
         }
     }
 
+    // When formatting a type to Zig, we need to know if the type is the top-level type or
+    // a child type of something like a pointer.  This is so we can generate the correct
+    // `void` type.  Top level void types become void, but pointers to void types must
+    // become pointers to the `opaque{}` type.
+    internal enum DepthContext
+    {
+        top_level,
+        child,
+    }
+
     internal abstract class TypeRef
     {
         internal abstract void addTypeRefs(TypeGenInfoSet type_refs);
 
-        internal abstract void formatZigType(StringBuilder builder);
+        internal abstract void formatZigType(StringBuilder builder, DepthContext depth_context);
     }
 
     internal class ArrayTypeRef : TypeRef
@@ -139,10 +149,11 @@ public static partial class ZigWin32
             this.element_type.addTypeRefs(type_refs);
         }
 
-        internal override void formatZigType(StringBuilder builder)
+        internal override void formatZigType(StringBuilder builder, DepthContext depth_context)
         {
-            builder.Append("[]");
-            this.element_type.formatZigType(builder);
+            // TODO: take ArrayShape into account
+            builder.Append("[*]");
+            this.element_type.formatZigType(builder, DepthContext.child);
         }
     }
 
@@ -160,11 +171,11 @@ public static partial class ZigWin32
             this.target_type.addTypeRefs(type_refs);
         }
 
-        internal override void formatZigType(StringBuilder builder)
+        internal override void formatZigType(StringBuilder builder, DepthContext depth_context)
         {
             // TODO: do I need to surround it with parens?
             builder.Append("*(");
-            this.target_type.formatZigType(builder);
+            this.target_type.formatZigType(builder, DepthContext.child);
             builder.Append(')');
         }
     }
@@ -183,11 +194,11 @@ public static partial class ZigWin32
             this.target_type.addTypeRefs(type_refs);
         }
 
-        internal override void formatZigType(StringBuilder builder)
+        internal override void formatZigType(StringBuilder builder, DepthContext depth_context)
         {
             // TODO: do I need to surround it with parens?
             builder.Append("*(");
-            this.target_type.formatZigType(builder);
+            this.target_type.formatZigType(builder, DepthContext.child);
             builder.Append(')');
         }
     }
@@ -206,7 +217,7 @@ public static partial class ZigWin32
             type_refs.addOrVerifyEqual(this.info);
         }
 
-        internal override void formatZigType(StringBuilder builder)
+        internal override void formatZigType(StringBuilder builder, DepthContext depth_context)
         {
             builder.AppendFormat("{0}", this.info.name);
         }
@@ -226,12 +237,12 @@ public static partial class ZigWin32
         {
         }
 
-        internal override void formatZigType(StringBuilder builder)
+        internal override void formatZigType(StringBuilder builder, DepthContext depth_context)
         {
             builder.Append(this.code switch
             {
 #pragma warning disable SA1025 // Code should not contain multiple whitespace in a row
-                PrimitiveTypeCode.Void      => "void",
+                PrimitiveTypeCode.Void      => (depth_context == DepthContext.top_level) ? "void" : "c_void",
                 PrimitiveTypeCode.Boolean   => "bool",
                 PrimitiveTypeCode.Char      => "u8",
                 PrimitiveTypeCode.SByte     => "i8",
@@ -271,9 +282,9 @@ public static partial class ZigWin32
         {
         }
 
-        internal override void formatZigType(StringBuilder builder)
+        internal override void formatZigType(StringBuilder builder, DepthContext depth_context)
         {
-            builder.AppendFormat("struct {{ unhandled_type: []const u8 = \"{0}.{1}\" }}", this.@namespace, this.name);
+            builder.AppendFormat("extern struct {{ unhandled_type: [*]const u8 = \"{0}.{1}\" }}", this.@namespace, this.name);
         }
     }
 

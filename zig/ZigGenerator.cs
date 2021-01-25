@@ -349,14 +349,24 @@ test """" {
             }
 
             out_file.WriteLine("// TODO: I think this is a struct, but not sure at this point, assuming it is for now");
-            out_file.WriteLine("pub const {0} = extern struct {{", type_info.name);
-            foreach (FieldDefinitionHandle field_def_handle in type_info.def.GetFields())
+            if (type_info.def.GetFields().Count == 0)
             {
-                FieldDefinition field_def = this.mr.GetFieldDefinition(field_def_handle);
-                string field_type_zig = addTypeRef(type_refs, field_def.DecodeSignature(this.type_ref_decoder, null));
-                out_file.WriteLine("    {0}: *opaque{{}}, // {1}", escapeZigId(this.mr.GetString(field_def.Name)), field_type_zig);
+                out_file.WriteLine(
+                    "pub const {0} = opaque {{ }}; // a struct with no fields? this means Zig can't use it in extern structs, so we're making it opaque",
+                    type_info.name);
+                return;
             }
-            out_file.WriteLine("};");
+            else
+            {
+                out_file.WriteLine("pub const {0} = extern struct {{", type_info.name);
+                foreach (FieldDefinitionHandle field_def_handle in type_info.def.GetFields())
+                {
+                    FieldDefinition field_def = this.mr.GetFieldDefinition(field_def_handle);
+                    string field_type_zig = addTypeRef(type_refs, field_def.DecodeSignature(this.type_ref_decoder, null));
+                    out_file.WriteLine("    {0}: {1},", escapeZigId(this.mr.GetString(field_def.Name)), field_type_zig);
+                }
+                out_file.WriteLine("};");
+            }
         }
     }
 
@@ -398,7 +408,7 @@ test """" {
     {
         type_ref.addTypeRefs(type_refs);
         StringBuilder builder = new StringBuilder();
-        type_ref.formatZigType(builder);
+        type_ref.formatZigType(builder, DepthContext.top_level);
         return builder.ToString();
     }
 
