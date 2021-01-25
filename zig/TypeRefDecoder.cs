@@ -9,11 +9,11 @@ using System.Text;
 public static partial class ZigWin32
 {
     // Implements the ISignatureTypeProvider interface used as a callback by MetadataReader to create objects that represent types.
-    internal class TypeRefDecoder : ISignatureTypeProvider<TypeRef, INothing?>
+    class TypeRefDecoder : ISignatureTypeProvider<TypeRef, INothing?>
     {
-        private readonly Dictionary<string, TypeGenInfo> no_namespace_type_map;
-        private readonly Dictionary<string, Api> api_namespace_map;
-        private readonly Dictionary<TypeDefinitionHandle, TypeGenInfo> type_map;
+        readonly Dictionary<string, TypeGenInfo> no_namespace_type_map;
+        readonly Dictionary<string, Api> api_namespace_map;
+        readonly Dictionary<TypeDefinitionHandle, TypeGenInfo> type_map;
 
         public TypeRefDecoder(
             Dictionary<string, TypeGenInfo> no_namespace_type_map,
@@ -120,36 +120,36 @@ public static partial class ZigWin32
     // a child type of something like a pointer.  This is so we can generate the correct
     // `void` type.  Top level void types become void, but pointers to void types must
     // become pointers to the `opaque{}` type.
-    internal enum DepthContext
+    enum DepthContext
     {
         top_level,
         child,
     }
 
-    internal abstract class TypeRef
+    abstract class TypeRef
     {
-        internal abstract void addTypeRefs(TypeGenInfoSet type_refs);
+        public abstract void addTypeRefs(TypeGenInfoSet type_refs);
 
-        internal abstract void formatZigType(StringBuilder builder, DepthContext depth_context);
+        public abstract void formatZigType(StringBuilder builder, DepthContext depth_context);
     }
 
-    internal class ArrayTypeRef : TypeRef
+    class ArrayTypeRef : TypeRef
     {
-        internal readonly TypeRef element_type;
-        internal readonly ArrayShape shape;
+        public readonly TypeRef element_type;
+        public readonly ArrayShape shape;
 
-        internal ArrayTypeRef(TypeRef element_type, ArrayShape shape)
+        public ArrayTypeRef(TypeRef element_type, ArrayShape shape)
         {
             this.element_type = element_type;
             this.shape = shape;
         }
 
-        internal override void addTypeRefs(TypeGenInfoSet type_refs)
+        public override void addTypeRefs(TypeGenInfoSet type_refs)
         {
             this.element_type.addTypeRefs(type_refs);
         }
 
-        internal override void formatZigType(StringBuilder builder, DepthContext depth_context)
+        public override void formatZigType(StringBuilder builder, DepthContext depth_context)
         {
             // TODO: take ArrayShape into account
             builder.Append("[*]");
@@ -157,21 +157,21 @@ public static partial class ZigWin32
         }
     }
 
-    internal class ReferenceTypeRef : TypeRef
+    class ReferenceTypeRef : TypeRef
     {
-        internal readonly TypeRef target_type;
+        public readonly TypeRef target_type;
 
-        internal ReferenceTypeRef(TypeRef target_type)
+        public ReferenceTypeRef(TypeRef target_type)
         {
             this.target_type = target_type;
         }
 
-        internal override void addTypeRefs(TypeGenInfoSet type_refs)
+        public override void addTypeRefs(TypeGenInfoSet type_refs)
         {
             this.target_type.addTypeRefs(type_refs);
         }
 
-        internal override void formatZigType(StringBuilder builder, DepthContext depth_context)
+        public override void formatZigType(StringBuilder builder, DepthContext depth_context)
         {
             // TODO: do I need to surround it with parens?
             builder.Append("*(");
@@ -180,21 +180,21 @@ public static partial class ZigWin32
         }
     }
 
-    internal class PointerTypeRef : TypeRef
+    class PointerTypeRef : TypeRef
     {
-        internal readonly TypeRef target_type;
+        public readonly TypeRef target_type;
 
-        internal PointerTypeRef(TypeRef target_type)
+        public PointerTypeRef(TypeRef target_type)
         {
             this.target_type = target_type;
         }
 
-        internal override void addTypeRefs(TypeGenInfoSet type_refs)
+        public override void addTypeRefs(TypeGenInfoSet type_refs)
         {
             this.target_type.addTypeRefs(type_refs);
         }
 
-        internal override void formatZigType(StringBuilder builder, DepthContext depth_context)
+        public override void formatZigType(StringBuilder builder, DepthContext depth_context)
         {
             // TODO: do I need to surround it with parens?
             builder.Append("*(");
@@ -203,41 +203,41 @@ public static partial class ZigWin32
         }
     }
 
-    internal class CustomTypeRef : TypeRef
+    class CustomTypeRef : TypeRef
     {
-        internal readonly TypeGenInfo info;
+        public readonly TypeGenInfo info;
 
-        internal CustomTypeRef(TypeGenInfo info)
+        public CustomTypeRef(TypeGenInfo info)
         {
             this.info = info;
         }
 
-        internal override void addTypeRefs(TypeGenInfoSet type_refs)
+        public override void addTypeRefs(TypeGenInfoSet type_refs)
         {
             type_refs.addOrVerifyEqual(this.info);
         }
 
-        internal override void formatZigType(StringBuilder builder, DepthContext depth_context)
+        public override void formatZigType(StringBuilder builder, DepthContext depth_context)
         {
             builder.AppendFormat("{0}", this.info.name);
         }
     }
 
-    internal class PrimitiveTypeRef : TypeRef
+    class PrimitiveTypeRef : TypeRef
     {
-        internal readonly PrimitiveTypeCode code;
+        public readonly PrimitiveTypeCode code;
 
         // TODO: use lookup table instead?
-        internal PrimitiveTypeRef(PrimitiveTypeCode code)
+        public PrimitiveTypeRef(PrimitiveTypeCode code)
         {
             this.code = code;
         }
 
-        internal override void addTypeRefs(TypeGenInfoSet type_refs)
+        public override void addTypeRefs(TypeGenInfoSet type_refs)
         {
         }
 
-        internal override void formatZigType(StringBuilder builder, DepthContext depth_context)
+        public override void formatZigType(StringBuilder builder, DepthContext depth_context)
         {
             builder.Append(this.code switch
             {
@@ -266,29 +266,29 @@ public static partial class ZigWin32
         }
     }
 
-    internal class UnhandledTypeRef : TypeRef
+    class UnhandledTypeRef : TypeRef
     {
-        internal readonly string @namespace;
-        internal readonly string name;
+        public readonly string @namespace;
+        public readonly string name;
 
         // TODO: use lookup table instead?
-        internal UnhandledTypeRef(string @namespace, string name)
+        public UnhandledTypeRef(string @namespace, string name)
         {
             this.@namespace = @namespace;
             this.name = name;
         }
 
-        internal override void addTypeRefs(TypeGenInfoSet type_refs)
+        public override void addTypeRefs(TypeGenInfoSet type_refs)
         {
         }
 
-        internal override void formatZigType(StringBuilder builder, DepthContext depth_context)
+        public override void formatZigType(StringBuilder builder, DepthContext depth_context)
         {
             builder.AppendFormat("extern struct {{ unhandled_type: [*]const u8 = \"{0}.{1}\" }}", this.@namespace, this.name);
         }
     }
 
-    internal interface INothing
+    interface INothing
     {
     }
 }
