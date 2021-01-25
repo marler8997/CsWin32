@@ -107,7 +107,7 @@ public static partial class ZigWin32
             }
 
             Api api = this.api_namespace_map[@namespace];
-            return new CustomTypeRef(api.type_name_map[name]);
+            return new CustomTypeRef(api.types[api.type_name_fqn_map[name]]);
         }
 
         public TypeRef GetTypeFromSpecification(MetadataReader mr, INothing? genericContext, TypeSpecificationHandle handle, byte rawTypeKind)
@@ -118,28 +118,28 @@ public static partial class ZigWin32
 
     internal abstract class TypeRef
     {
-        public abstract void addImports(HashSet<TypeGenInfo> imports);
+        internal abstract void addTypeRefs(TypeGenInfoSet type_refs);
 
-        public abstract void formatZigType(StringBuilder builder);
+        internal abstract void formatZigType(StringBuilder builder);
     }
 
     internal class ArrayTypeRef : TypeRef
     {
-        public readonly TypeRef element_type;
-        public readonly ArrayShape shape;
+        internal readonly TypeRef element_type;
+        internal readonly ArrayShape shape;
 
-        public ArrayTypeRef(TypeRef element_type, ArrayShape shape)
+        internal ArrayTypeRef(TypeRef element_type, ArrayShape shape)
         {
             this.element_type = element_type;
             this.shape = shape;
         }
 
-        public override void addImports(HashSet<TypeGenInfo> imports)
+        internal override void addTypeRefs(TypeGenInfoSet type_refs)
         {
-            this.element_type.addImports(imports);
+            this.element_type.addTypeRefs(type_refs);
         }
 
-        public override void formatZigType(StringBuilder builder)
+        internal override void formatZigType(StringBuilder builder)
         {
             builder.Append("[]");
             this.element_type.formatZigType(builder);
@@ -148,19 +148,19 @@ public static partial class ZigWin32
 
     internal class ReferenceTypeRef : TypeRef
     {
-        public readonly TypeRef target_type;
+        internal readonly TypeRef target_type;
 
-        public ReferenceTypeRef(TypeRef target_type)
+        internal ReferenceTypeRef(TypeRef target_type)
         {
             this.target_type = target_type;
         }
 
-        public override void addImports(HashSet<TypeGenInfo> imports)
+        internal override void addTypeRefs(TypeGenInfoSet type_refs)
         {
-            this.target_type.addImports(imports);
+            this.target_type.addTypeRefs(type_refs);
         }
 
-        public override void formatZigType(StringBuilder builder)
+        internal override void formatZigType(StringBuilder builder)
         {
             // TODO: do I need to surround it with parens?
             builder.Append("*(");
@@ -171,19 +171,19 @@ public static partial class ZigWin32
 
     internal class PointerTypeRef : TypeRef
     {
-        public readonly TypeRef target_type;
+        internal readonly TypeRef target_type;
 
-        public PointerTypeRef(TypeRef target_type)
+        internal PointerTypeRef(TypeRef target_type)
         {
             this.target_type = target_type;
         }
 
-        public override void addImports(HashSet<TypeGenInfo> imports)
+        internal override void addTypeRefs(TypeGenInfoSet type_refs)
         {
-            this.target_type.addImports(imports);
+            this.target_type.addTypeRefs(type_refs);
         }
 
-        public override void formatZigType(StringBuilder builder)
+        internal override void formatZigType(StringBuilder builder)
         {
             // TODO: do I need to surround it with parens?
             builder.Append("*(");
@@ -194,19 +194,19 @@ public static partial class ZigWin32
 
     internal class CustomTypeRef : TypeRef
     {
-        public readonly TypeGenInfo info;
+        internal readonly TypeGenInfo info;
 
-        public CustomTypeRef(TypeGenInfo info)
+        internal CustomTypeRef(TypeGenInfo info)
         {
             this.info = info;
         }
 
-        public override void addImports(HashSet<TypeGenInfo> imports)
+        internal override void addTypeRefs(TypeGenInfoSet type_refs)
         {
-            imports.Add(this.info);
+            type_refs.addOrVerifyEqual(this.info);
         }
 
-        public override void formatZigType(StringBuilder builder)
+        internal override void formatZigType(StringBuilder builder)
         {
             builder.AppendFormat("{0}", this.info.name);
         }
@@ -214,19 +214,19 @@ public static partial class ZigWin32
 
     internal class PrimitiveTypeRef : TypeRef
     {
-        public readonly PrimitiveTypeCode code;
+        internal readonly PrimitiveTypeCode code;
 
         // TODO: use lookup table instead?
-        public PrimitiveTypeRef(PrimitiveTypeCode code)
+        internal PrimitiveTypeRef(PrimitiveTypeCode code)
         {
             this.code = code;
         }
 
-        public override void addImports(HashSet<TypeGenInfo> imports)
+        internal override void addTypeRefs(TypeGenInfoSet type_refs)
         {
         }
 
-        public override void formatZigType(StringBuilder builder)
+        internal override void formatZigType(StringBuilder builder)
         {
             builder.Append(this.code switch
             {
@@ -257,21 +257,21 @@ public static partial class ZigWin32
 
     internal class UnhandledTypeRef : TypeRef
     {
-        public readonly string @namespace;
-        public readonly string name;
+        internal readonly string @namespace;
+        internal readonly string name;
 
         // TODO: use lookup table instead?
-        public UnhandledTypeRef(string @namespace, string name)
+        internal UnhandledTypeRef(string @namespace, string name)
         {
             this.@namespace = @namespace;
             this.name = name;
         }
 
-        public override void addImports(HashSet<TypeGenInfo> imports)
+        internal override void addTypeRefs(TypeGenInfoSet type_refs)
         {
         }
 
-        public override void formatZigType(StringBuilder builder)
+        internal override void formatZigType(StringBuilder builder)
         {
             builder.AppendFormat("struct {{ unhandled_type: []const u8 = \"{0}.{1}\" }}", this.@namespace, this.name);
         }
