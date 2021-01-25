@@ -79,8 +79,11 @@ test """" {
 
                 if (type_info.name == "Apis")
                 {
+                    // NOTE: The "Apis" type is a specially-named type reserved to contain all the constant
+                    // and function declarations for an api.
                     Debug.Assert(api.constants == null, "multiple Apis types in the same namespace");
                     api.constants = type_info.def.GetFields();
+                    api.funcs = type_info.def.GetMethods();
                 }
                 else
                 {
@@ -203,6 +206,19 @@ test """" {
             }
             out_file.WriteLine();
             out_file.WriteLine("//");
+            out_file.WriteLine("// functions");
+            out_file.WriteLine("//");
+            uint func_count = 0;
+            if (api.funcs != null)
+            {
+                foreach (MethodDefinitionHandle func_handle in api.funcs)
+                {
+                    this.GenerateFunction(out_file, type_refs, func_handle);
+                    func_count++;
+                }
+            }
+            out_file.WriteLine();
+            out_file.WriteLine("//");
             out_file.WriteLine("// type imports");
             out_file.WriteLine("//");
             uint type_import_count = 0;
@@ -230,8 +246,9 @@ test """" {
             out_file.WriteLine("test \"\" {");
             out_file.WriteLine("    const constant_export_count = {0};", const_count);
             out_file.WriteLine("    const type_export_count = {0};", type_count);
+            out_file.WriteLine("    const func_count = {0};", func_count);
             out_file.WriteLine("    const type_import_count = {0};", type_import_count);
-            out_file.WriteLine("    @setEvalBranchQuota(constant_export_count + type_export_count + type_import_count + 2); // TODO: why do I need these extra 2?");
+            out_file.WriteLine("    @setEvalBranchQuota(constant_export_count + type_export_count + func_count + type_import_count + 2); // TODO: why do I need these extra 2?");
             out_file.WriteLine("    @import(\"std\").testing.refAllDecls(@This());");
             out_file.WriteLine("}");
         }
@@ -476,6 +493,13 @@ test """" {
 
             throw new InvalidDataException("Unsupported attribute constructor kind: " + attr.Constructor.Kind);
         }
+
+        void GenerateFunction(StreamWriter out_file, TypeGenInfoSet type_refs, MethodDefinitionHandle func_handle)
+        {
+            MethodDefinition func_def = this.mr.GetMethodDefinition(func_handle);
+            string func_name = this.mr.GetString(func_def.Name);
+            out_file.WriteLine("pub extern \"c\" fn {0}() void; // TODO: generate this correctly", func_name);
+        }
     }
 
     // assert that an assumption about the win32metdata winmd data is true
@@ -522,6 +546,7 @@ test """" {
         public readonly TypeGenInfoSet top_level_types = new TypeGenInfoSet();
         public readonly Dictionary<string, string> type_name_fqn_map = new Dictionary<string, string>();
         public FieldDefinitionHandleCollection? constants;
+        public MethodDefinitionHandleCollection? funcs;
         public readonly HashSet<TypeGenInfo> type_imports = new HashSet<TypeGenInfo>();
 
         public Api(string @namespace)
