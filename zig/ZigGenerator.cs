@@ -397,10 +397,11 @@ test """" {
                 else if (attr is BasicTypeAttr.RaiiFree)
                 {
                     Console.WriteLine("RaiiFree: {0}", type_info.name);
+
+                    // TODO: what to do with this?
                 }
                 else if (attr is BasicTypeAttr.NativeTypedef)
                 {
-                    Console.WriteLine("NativeTypedef: {0}", type_info.name);
                     is_native_typedef = true;
                 }
                 else
@@ -511,8 +512,46 @@ test """" {
             assertData(!decoded_attrs.new_slot);
             assertData(!decoded_attrs.special_name);
             assertData(!decoded_attrs.check_access_on_override);
+            out_file.WriteLine();
+            out_file.WriteLine("pub extern \"todo\" fn {0}(", func_name);
 
-            out_file.WriteLine("pub extern \"todo\" fn {0}() void; // TODO: generate this correctly", func_name);
+            Parameter? optional_return_param = null;
+            int next_expected_seq_number = 0;
+            foreach (ParameterHandle param_handle in func_def.GetParameters())
+            {
+                Parameter param = this.mr.GetParameter(param_handle);
+
+                if (next_expected_seq_number == 0)
+                {
+                    next_expected_seq_number++;
+                    if (param.SequenceNumber == 0)
+                    {
+                        optional_return_param = param;
+                        continue;
+                    }
+                }
+                assertData(param.SequenceNumber == next_expected_seq_number, "parameters were not ordered");
+                next_expected_seq_number++;
+
+                // TODO: how do I get the type?  via the sequence number?
+                // TODO: handle param.Attributes
+                // TODO: handle param.GetCustomAttributes()
+                // TODO: handle param.GetDefaultValue();
+                // TODO: handle param.GetMarshallingDescriptor();
+                string param_name = this.mr.GetString(param.Name);
+                assertData(param_name.Length > 0);
+                out_file.WriteLine("    {0}: *opaque{{}}, // TODO: get actual param type", escapeZigId(param_name));
+            }
+            out_file.Write(") callconv(@import(\"std\").os.windows.WINAPI) ");
+            if (optional_return_param is Parameter return_param)
+            {
+                out_file.Write("*opaque{ pub const comment = \"TODO: put actual return type here\"; }");
+            }
+            else
+            {
+                out_file.Write("void");
+            }
+            out_file.WriteLine(";");
         }
     }
 
