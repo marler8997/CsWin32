@@ -96,7 +96,7 @@ public static partial class ZigWin32
                 if (type_ref.ResolutionScope.Kind == HandleKind.ModuleDefinition)
                 {
                     var api = this.api_namespace_map[@namespace];
-                    return new TypeRef.User(api.types[api.type_name_fqn_map[name]]);
+                    return new TypeRef.User(api.top_level_types[api.type_name_fqn_map[name]]);
                 }
                 else if (type_ref.ResolutionScope.Kind == HandleKind.TypeReference)
                 {
@@ -139,7 +139,7 @@ public static partial class ZigWin32
                 if (type_ref.ResolutionScope.Kind == HandleKind.ModuleDefinition)
                 {
                     Api api = this.api_namespace_map[@namespace];
-                    return api.types[api.type_name_fqn_map[name]];
+                    return api.top_level_types[api.type_name_fqn_map[name]];
                 }
 
                 if (type_ref.ResolutionScope.Kind == HandleKind.TypeReference)

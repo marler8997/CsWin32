@@ -84,7 +84,7 @@ test """" {
                 }
                 else
                 {
-                    api.addType(type_info);
+                    api.addTopLevelType(type_info);
                 }
             }
 
@@ -195,7 +195,7 @@ test """" {
             out_file.WriteLine("//");
             TypeGenInfoSet type_refs = new TypeGenInfoSet();
             uint type_count = 0;
-            foreach (TypeGenInfo type_info in api.types)
+            foreach (TypeGenInfo type_info in api.top_level_types)
             {
                 this.cancel_token.ThrowIfCancellationRequested();
                 this.GenerateType(out_file, type_refs, type_info);
@@ -208,7 +208,14 @@ test """" {
             uint type_import_count = 0;
             foreach (TypeGenInfo type_ref in type_refs)
             {
-                if (!api.types.contains(type_ref))
+                // this means a nested type was referenced such that the scope where it was
+                // referenced did not contain the nested type. This will need to be handled
+                // by qualifying the nested type with its enclosing types.
+                if (type_ref.isNested())
+                {
+                    throw new NotImplementedException();
+                }
+                else if (!api.top_level_types.contains(type_ref))
                 {
                     if (type_ref.type_namespace.Length == 0)
                     {
@@ -512,7 +519,7 @@ test """" {
         public readonly string name;
         public readonly string name_lower;
         public readonly string base_filename;
-        public readonly TypeGenInfoSet types = new TypeGenInfoSet();
+        public readonly TypeGenInfoSet top_level_types = new TypeGenInfoSet();
         public readonly Dictionary<string, string> type_name_fqn_map = new Dictionary<string, string>();
         public FieldDefinitionHandleCollection? constants;
         public readonly HashSet<TypeGenInfo> type_imports = new HashSet<TypeGenInfo>();
@@ -531,9 +538,10 @@ test """" {
             this.base_filename = this.name_lower + ".zig";
         }
 
-        public void addType(TypeGenInfo type_info)
+        public void addTopLevelType(TypeGenInfo type_info)
         {
-            this.types.Add(type_info);
+            Debug.Assert(!type_info.isNested(), "codebug");
+            this.top_level_types.Add(type_info);
             this.type_name_fqn_map.Add(type_info.name, type_info.fqn);
         }
     }
