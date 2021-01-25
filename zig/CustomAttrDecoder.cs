@@ -10,6 +10,12 @@ public static partial class ZigWin32
 {
     class CustomAttrDecoder : ICustomAttributeTypeProvider<CustomAttrType>
     {
+        public static readonly CustomAttrDecoder Instance = new CustomAttrDecoder();
+
+        private CustomAttrDecoder()
+        {
+        }
+
         public CustomAttrType GetPrimitiveType(PrimitiveTypeCode code)
         {
             if (code != PrimitiveTypeCode.String)

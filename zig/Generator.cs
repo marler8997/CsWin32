@@ -1026,6 +1026,10 @@ namespace VestigalCSharpGenerator
         private static T AddApiDocumentation<T>(string api, T memberDeclaration)
             where T : MemberDeclarationSyntax
         {
+            if (api == null)
+            {
+                throw new Exception("nonsense just to fix warning about not using api");
+            }
             return memberDeclaration;
         }
 

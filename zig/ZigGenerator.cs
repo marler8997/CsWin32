@@ -37,67 +37,97 @@ test """" {
 
         readonly MetadataReader mr;
         readonly CancellationToken cancel_token;
-        readonly Dictionary<string, TypeGenInfo> no_namespace_type_map = new Dictionary<string, TypeGenInfo>();
         readonly Dictionary<string, Api> api_namespace_map = new Dictionary<string, Api>();
         readonly Dictionary<TypeDefinitionHandle, TypeGenInfo> type_map = new Dictionary<TypeDefinitionHandle, TypeGenInfo>();
         readonly TypeRefDecoder type_ref_decoder;
-        readonly CustomAttrDecoder custom_attr_decoder;
 
         ZigGenerator(MetadataReader mr, CancellationToken cancel_token)
         {
             this.mr = mr;
             this.cancel_token = cancel_token;
+
+            // ---------------------------------------------------------------
+            // Scan all types and sort into the api they belong to
+            // ---------------------------------------------------------------
+            List<TypeDefinitionHandle> nested_types = new List<TypeDefinitionHandle>();
             foreach (TypeDefinitionHandle type_def_handle in this.mr.TypeDefinitions)
             {
-                TypeGenInfo type_info = new TypeGenInfo(this.mr, type_def_handle);
-                bool is_constant_type = type_info.name == "Apis";
-                if (!is_constant_type)
+                TypeDefinition type_def = mr.GetTypeDefinition(type_def_handle);
+
+                // skip nested types until we get all the non-nested types, this is because
+                // we need to be able to look up the enclosing type to get all the info we need
+                if (type_def.IsNested)
                 {
-                    this.type_map.Add(type_def_handle, type_info);
+                    nested_types.Add(type_def_handle);
+                    continue;
+                }
+                TypeGenInfo type_info = TypeGenInfo.CreateNotNested(mr, type_def);
+                this.type_map.Add(type_def_handle, type_info);
+
+                if (type_info.type_namespace.Length == 0)
+                {
+                    Debug.Assert(type_info.name == "<Module>", "found a type without a namespace that is not nested and not '<Module>'");
+                    continue;
                 }
 
-                if (type_info.@namespace.Length == 0)
+                Api? api;
+                if (!this.api_namespace_map.TryGetValue(type_info.api_namespace, out api))
                 {
-                    Debug.Assert(!is_constant_type, "found Apis types in the empty namespace");
+                    api = new Api(type_info.api_namespace);
+                    this.api_namespace_map.Add(type_info.api_namespace, api);
+                }
 
-                    if (this.no_namespace_type_map.ContainsKey(type_info.name))
-                    {
-                        // https://github.com/microsoft/CsWin32/issues/31
-                        if (!no_namespace_type_conflicts.Contains(type_info.name))
-                        {
-                            throw new InvalidDataException(string.Format("new type conflict '{0}', add to no_namespace_type_conflicts to ignore it", type_info.name));
-                        }
-                    }
-                    else
-                    {
-                        this.no_namespace_type_map.Add(type_info.name, type_info);
-                    }
+                if (type_info.name == "Apis")
+                {
+                    Debug.Assert(api.constants == null, "multiple Apis types in the same namespace");
+                    api.constants = type_info.def.GetFields();
                 }
                 else
                 {
-                    Api? api;
-                    if (!this.api_namespace_map.TryGetValue(type_info.@namespace, out api))
-                    {
-                        api = new Api(type_info.@namespace);
-                        this.api_namespace_map.Add(type_info.@namespace, api);
-                    }
-
-                    if (is_constant_type)
-                    {
-                        Debug.Assert(api.constants == null, "multiple Apis types in the same namespace");
-                        api.constants = type_info.def.GetFields();
-                    }
-                    else
-                    {
-                        api.addType(type_info);
-                    }
+                    api.addType(type_info);
                 }
             }
-            this.type_ref_decoder = new TypeRefDecoder(this.no_namespace_type_map, this.api_namespace_map, this.type_map);
-            this.custom_attr_decoder = new CustomAttrDecoder();
+
+            // ---------------------------------------------------------------
+            // Now go back through and create objects for the nested types
+            // ---------------------------------------------------------------
+            for (uint pass = 1; ; pass++)
+            {
+                int save_length = nested_types.Count;
+                Console.WriteLine("DEBUG: nested loop pass {0} (types left: {1})", pass, save_length);
+
+                for (int i = nested_types.Count - 1; i >= 0; i--)
+                {
+                    TypeDefinitionHandle type_def_handle = nested_types[i];
+                    TypeDefinition type_def = mr.GetTypeDefinition(type_def_handle);
+                    Debug.Assert(type_def.IsNested, "codebug");
+                    if (this.type_map.TryGetValue(type_def.GetDeclaringType(), out TypeGenInfo? enclosing_type))
+                    {
+                        TypeGenInfo type_info = TypeGenInfo.CreateNested(mr, type_def, enclosing_type);
+                        this.type_map.Add(type_def_handle, type_info);
+                        enclosing_type.addNestedType(type_info);
+                        nested_types.RemoveAt(i);
+                        i--;
+                    }
+                }
+
+                if (nested_types.Count == 0)
+                {
+                    break;
+                }
+
+                if (save_length == nested_types.Count)
+                {
+                    throw new InvalidDataException(string.Format(
+                        "found {0} nested types whose declaring type handle does not match any type definition handle",
+                        nested_types.Count));
+                }
+            }
+
+            this.type_ref_decoder = new TypeRefDecoder(this.api_namespace_map, this.type_map);
         }
 
-        public static void Generate(MetadataReader mr, string out_dir, CancellationToken cancel_token)
+        internal static void Generate(MetadataReader mr, string out_dir, CancellationToken cancel_token)
         {
             ZigGenerator generator = new ZigGenerator(mr, cancel_token);
 
@@ -159,11 +189,11 @@ test """" {
                     const_count += 1;
                 }
             }
-
-            TypeGenInfoSet type_refs = new TypeGenInfoSet();
+            out_file.WriteLine();
             out_file.WriteLine("//");
             out_file.WriteLine("// types");
             out_file.WriteLine("//");
+            TypeGenInfoSet type_refs = new TypeGenInfoSet();
             uint type_count = 0;
             foreach (TypeGenInfo type_info in api.types)
             {
@@ -171,7 +201,7 @@ test """" {
                 this.GenerateType(out_file, type_refs, type_info);
                 type_count += 1;
             }
-
+            out_file.WriteLine();
             out_file.WriteLine("//");
             out_file.WriteLine("// type imports");
             out_file.WriteLine("//");
@@ -180,37 +210,15 @@ test """" {
             {
                 if (!api.types.contains(type_ref))
                 {
-                    if (api.type_name_fqn_map.TryGetValue(type_ref.name, out string? local_fqn))
+                    if (type_ref.type_namespace.Length == 0)
                     {
-                        if (type_ref.@namespace.Length != 0)
-                        {
-                            throw new InvalidOperationException(string.Format(
-                                "TypeConflict between '{0}' and one with a non-empty namespace '{1}'",
-                                local_fqn,
-                                type_ref.fqn));
-                        }
-
-                        // TODO: file and/or find an issue for this, this is a bug in win32metadata
-                        out_file.WriteLine(
-                            "// !!!TypeConflict!!! local type '{0}' conflicts with a type that has no namespace (TODO: file or find an issue for this in win32metadata)'",
-                            local_fqn);
+                        throw new InvalidOperationException();
                     }
-                    else
-                    {
-                        if (type_ref.@namespace.Length == 0)
-                        {
-                            out_file.WriteLine("const {0} = *opaque{{}}; // cannot import because it has no namesapce (pretty sure this is an issue in win32metadata)", type_ref.name);
-                        }
-                        else
-                        {
-                            Api import_api = this.api_namespace_map[type_ref.@namespace];
-                            out_file.WriteLine("const {0} = @import(\"{1}\").{0};", type_ref.name, import_api.base_filename);
-                        }
-                        type_import_count += 1;
-                    }
+                    Api import_api = this.api_namespace_map[type_ref.api_namespace];
+                    out_file.WriteLine("const {0} = @import(\"{1}\").{0};", type_ref.name, import_api.base_filename);
+                    type_import_count += 1;
                 }
             }
-
             out_file.WriteLine();
             out_file.WriteLine("test \"\" {");
             out_file.WriteLine("    const constant_export_count = {0};", const_count);
@@ -256,10 +264,6 @@ test """" {
                 */
             }
 
-            // NOTE: fieldDef.GetDeclaringType returns the type that contains the Constant
-            //       I will probably use this to know where to put the constant but it has nothing
-            //       to do with the type of the constant.
-            // TypeGenInfo containingTypeInfo = this.GetTypeGenInfo(fieldDef.GetDeclaringType());
             string name = this.mr.GetString(fieldDef.Name);
             Constant constant = this.mr.GetConstant(fieldDef.GetDefaultValue());
             var assign = toZigConstAssign(constant, this.mr);
@@ -288,7 +292,7 @@ test """" {
             {
                 TypeGenInfo declaring_type = this.type_map[type_info.def.GetDeclaringType()];
                 optional_declaring_type = declaring_type;
-                out_file.WriteLine("// DeclaringType: {0} (namespace={1})", declaring_type.name, declaring_type.@namespace);
+                out_file.WriteLine("// DeclaringType: {0} (api namespace={1})", declaring_type.name, declaring_type.api_namespace);
             }
             else
             {
@@ -348,6 +352,10 @@ test """" {
             if (skip_because != null)
             {
                 out_file.WriteLine("// not generate proper code for this type because {0}", skip_because);
+                if (type_info.nestedTypeCount() != 0)
+                {
+                    out_file.WriteLine("// WARNING: this type we are skipping has nested types!");
+                }
                 out_file.WriteLine("pub const {0} = *opaque{{}};", type_info.name);
                 return;
             }
@@ -384,8 +392,9 @@ test """" {
                     throw new InvalidDataException(string.Format("native typedef '{0}' has fields?", type_info.name));
                 }
                 FieldDefinition target_def = this.mr.GetFieldDefinition(type_info.def.GetFields().First());
-                string target_def_zig = addTypeRef(type_refs, target_def.DecodeSignature(this.type_ref_decoder, null));
+                string target_def_zig = addTypeRef(new TypeRefScope(type_info, type_refs), target_def.DecodeSignature(this.type_ref_decoder, null));
                 out_file.WriteLine("pub const {0} = {1};", escapeZigId(type_info.name), target_def_zig);
+                assertData(type_info.nestedTypeCount() == 0);
                 return;
             }
 
@@ -395,6 +404,7 @@ test """" {
                 out_file.WriteLine(
                     "pub const {0} = opaque {{ }}; // a struct with no fields? this means Zig can't use it in extern structs, so we're making it opaque",
                     type_info.name);
+                assertTemp(type_info.nestedTypeCount() == 0);
                 return;
             }
             else
@@ -403,9 +413,15 @@ test """" {
                 foreach (FieldDefinitionHandle field_def_handle in type_info.def.GetFields())
                 {
                     FieldDefinition field_def = this.mr.GetFieldDefinition(field_def_handle);
-                    string field_type_zig = addTypeRef(type_refs, field_def.DecodeSignature(this.type_ref_decoder, null));
+                    string field_type_zig = addTypeRef(new TypeRefScope(type_info, type_refs), field_def.DecodeSignature(this.type_ref_decoder, null));
                     out_file.WriteLine("    {0}: {1},", escapeZigId(this.mr.GetString(field_def.Name)), field_type_zig);
                 }
+
+                foreach (TypeGenInfo nested_type in type_info.nestedTypes())
+                {
+                    out_file.WriteLine("    pub const {0} = *opaque{{}}; // TODO: generate this nested type", nested_type.name);
+                }
+
                 out_file.WriteLine("};");
             }
         }
@@ -413,7 +429,7 @@ test """" {
         BasicTypeAttr decodeBasicTypeAttr(CustomAttribute attr)
         {
             NamespaceAndName attr_name = getAttrTypeName(this.mr, attr);
-            CustomAttributeValue<CustomAttrType> attr_args = attr.DecodeValue(this.custom_attr_decoder);
+            CustomAttributeValue<CustomAttrType> attr_args = attr.DecodeValue(CustomAttrDecoder.Instance);
             if (attr_name.Equals("System.Runtime.InteropServices", "GuidAttribute"))
             {
                 enforceAttrFixedArgCount(attr_name, attr_args, 1);
@@ -452,6 +468,25 @@ test """" {
             }
 
             throw new InvalidDataException("Unsupported attribute constructor kind: " + attr.Constructor.Kind);
+        }
+    }
+
+    // assert that an assumption about the win32metdata winmd data is true
+    static void assertData(bool assumption, string? optional_msg = null)
+    {
+        if (!assumption)
+        {
+            string suffix = (optional_msg == null) ? "" : (": " + optional_msg);
+            throw new InvalidDataException("an assumption about the win32metadata winmd data was violated" + suffix);
+        }
+    }
+
+    // assert that something is true temporarily
+    static void assertTemp(bool cond)
+    {
+        if (!cond)
+        {
+            throw new InvalidDataException("an assertTemp is false");
         }
     }
 
@@ -503,12 +538,40 @@ test """" {
         }
     }
 
+    struct TypeRefScope
+    {
+        public readonly TypeGenInfo current_type;
+        public readonly TypeGenInfoSet module_type_refs;
+
+        public TypeRefScope(TypeGenInfo current_type, TypeGenInfoSet module_type_refs)
+        {
+            this.current_type = current_type;
+            this.module_type_refs = module_type_refs;
+        }
+
+        public bool addTypeRef(TypeGenInfo info)
+        {
+            if (info.isNested())
+            {
+                if (this.current_type.hasNestedTypeInScope(info))
+                {
+                    return false; // no type ref needed
+                }
+                throw new NotImplementedException();
+            }
+            else
+            {
+                return this.module_type_refs.addOrVerifyEqual(info);
+            }
+        }
+    }
+
     // I've purposely combined adding a type ref and creating the Zig
     // type string so I don't accidently generate a type without noting
     // that I'm referencing it.
-    static string addTypeRef(TypeGenInfoSet type_refs, TypeRef type_ref)
+    static string addTypeRef(TypeRefScope scope, TypeRef type_ref)
     {
-        type_ref.addTypeRefs(type_refs);
+        type_ref.addTypeRefs(scope);
         StringBuilder builder = new StringBuilder();
         type_ref.formatZigType(builder, DepthContext.top_level);
         return builder.ToString();
@@ -575,19 +638,118 @@ test """" {
         }
     }
 
-    struct TypeGenInfo
+    class TypeGenInfo
     {
         public readonly TypeDefinition def;
         public readonly string name;
-        public readonly string @namespace;
+        public readonly string type_namespace; // note: this seems to always be empty for nested types
+        public readonly string api_namespace;
         public readonly string fqn; // note: all fqn (fully qualified name)'s are unique
 
-        public TypeGenInfo(MetadataReader mr, TypeDefinitionHandle handle)
+        private readonly TypeGenInfo? enclosing_type;
+        private List<TypeGenInfo>? nested_types;
+
+        TypeGenInfo(TypeDefinition def, string name, string type_namespace, string api_namespace, string fqn, TypeGenInfo? enclosing_type)
         {
-            this.def = mr.GetTypeDefinition(handle);
-            this.name = mr.GetString(this.def.Name);
-            this.@namespace = mr.GetString(this.def.Namespace);
-            this.fqn = string.Format("{0}.{1}", this.@namespace, this.name);
+            this.def = def;
+            this.name = name;
+            this.type_namespace = type_namespace;
+            this.api_namespace = api_namespace;
+            this.fqn = fqn;
+            this.enclosing_type = enclosing_type;
+        }
+
+        public static TypeGenInfo CreateNotNested(MetadataReader mr, TypeDefinition def)
+        {
+            Debug.Assert(!def.IsNested, "CreateNotNested called for TypeDefinition that is nested");
+            string name = mr.GetString(def.Name);
+            string @namespace = mr.GetString(def.Namespace);
+            string fqn = string.Format("{0}.{1}", @namespace, name);
+            return new TypeGenInfo(
+                def: def,
+                name: name,
+                type_namespace: @namespace,
+                api_namespace: @namespace,
+                fqn: fqn,
+                enclosing_type: null);
+        }
+
+        public static TypeGenInfo CreateNested(MetadataReader mr, TypeDefinition def, TypeGenInfo enclosing_type)
+        {
+            Debug.Assert(def.IsNested, "CreateNested called for TypeDefinition that is not nested");
+            string name = mr.GetString(def.Name);
+            string @namespace = mr.GetString(def.Namespace);
+            assertData(@namespace.Length == 0, "I thought all nested types had an empty namespace");
+            string fqn = string.Format("{0}+{1}", enclosing_type.fqn, name);
+            return new TypeGenInfo(
+                def: def,
+                name: name,
+                type_namespace: @namespace,
+                api_namespace: enclosing_type.api_namespace,
+                fqn: fqn,
+                enclosing_type: enclosing_type);
+        }
+
+        public bool isNested()
+        {
+            return this.enclosing_type != null;
+        }
+
+        public uint nestedTypeCount()
+        {
+            return (this.nested_types == null) ? 0 : (uint)this.nested_types.Count;
+        }
+
+        public IEnumerable<TypeGenInfo> nestedTypes()
+        {
+            return (this.nested_types == null) ? Enumerable.Empty<TypeGenInfo>() : this.nested_types;
+        }
+
+        public TypeGenInfo? tryGetNestedTypeByName(string name)
+        {
+            if (this.nested_types != null)
+            {
+                foreach (TypeGenInfo info in this.nested_types)
+                {
+                    if (info.name == name)
+                    {
+                        return info;
+                    }
+                }
+            }
+            return null;
+        }
+
+        public void addNestedType(TypeGenInfo type_info)
+        {
+            if (this.nested_types == null)
+            {
+                this.nested_types = new List<TypeGenInfo>();
+            }
+            else if (this.tryGetNestedTypeByName(type_info.name) != null)
+            {
+                throw new InvalidOperationException(string.Format("nested type '{0}' already exists in '{1}'", type_info.name, this.fqn));
+            }
+            this.nested_types.Add(type_info);
+        }
+
+        public TypeGenInfo getNestedTypeByName(string name) => this.tryGetNestedTypeByName(name) is TypeGenInfo info ? info :
+                throw new ArgumentException(string.Format("type '{0}' does not have nested type '{1}'", this.fqn, name));
+
+        public bool hasNestedTypeInScope(TypeGenInfo info)
+        {
+            Debug.Assert(info.isNested(), "codebug");
+            if (this.nested_types != null)
+            {
+                foreach (TypeGenInfo nested_info in this.nested_types)
+                {
+                    if (object.ReferenceEquals(nested_info, info))
+                    {
+                        return true;
+                    }
+                }
+            }
+            return this.enclosing_type is TypeGenInfo e && e.hasNestedTypeInScope(info);
         }
     }
 
@@ -621,32 +783,26 @@ test """" {
             }
         }
 
-        public bool TryLookup(string fqn, out TypeGenInfo info)
-        {
-            return this.fqn_map.TryGetValue(fqn, out info);
-        }
-
         public void Add(TypeGenInfo info)
         {
             this.ordered_list.Add(info);
             this.fqn_map.Add(info.fqn, info);
         }
 
-        public void addOrVerifyEqual(TypeGenInfo info)
+        public bool addOrVerifyEqual(TypeGenInfo info)
         {
-            if (this.fqn_map.TryGetValue(info.fqn, out TypeGenInfo other))
+            if (this.fqn_map.TryGetValue(info.fqn, out TypeGenInfo? other))
             {
-                if (!info.Equals(other))
+                if (!object.ReferenceEquals(info, other))
                 {
                     throw new InvalidDataException(string.Format(
                         "found 2 types with the same fully-qualified-name '{0}' that are not equal",
                         info.fqn));
                 }
+                return false; // already added
             }
-            else
-            {
-                this.Add(info);
-            }
+            this.Add(info);
+            return true; // newly added
         }
 
         public bool contains(TypeGenInfo info)
@@ -800,102 +956,5 @@ test """" {
         "var",
         "volatile",
         "while",
-    };
-
-    // https://github.com/microsoft/CsWin32/issues/31
-    public static readonly HashSet<string> no_namespace_type_conflicts = new HashSet<string>
-    {
-        "_Anonymous_e__Union",
-        "_Anonymous_e__Struct",
-        "_IPv4_e__Struct",
-        "_IPv4Transmit_e__Struct",
-        "_IPv4Receive_e__Struct",
-        "_IPv6Transmit_e__Struct",
-        "_IPv6Receive_e__Struct",
-        "_Supported_e__Struct",
-        "_IPv4AH_e__Struct",
-        "_IPv4ESP_e__Struct",
-        "_IPv6_e__Struct",
-        "_mod_vals_e__Union",
-        "_FacialFeatures_e__Struct",
-        "_Iris_e__Struct",
-        "_Specific_e__Union",
-        "_Fingerprint_e__Struct",
-        "_EnrollmentRequirements_e__Struct",
-        "_Voice_e__Struct",
-        "_OpaqueEngineData_e__Struct",
-        "_Parameters_e__Union",
-        "_u_e__Struct",
-        "_Anonymous1_e__Struct",
-        "_Anonymous2_e__Struct",
-        "_Data_e__Union",
-        "_Flags_e__Union",
-        "_Anonymous1_e__Union",
-        "_Anonymous2_e__Union",
-        "_Anonymous3_e__Struct",
-        "_Anonymous3_e__Union",
-        "_Flags_e__Struct",
-        "_N_e__Union",
-        "_Name_e__Struct",
-        "_Sym_e__Struct",
-        "_File_e__Struct",
-        "_Section_e__Struct",
-        "_CRC_e__Struct",
-        "_u1_e__Union",
-        "_u_e__Union",
-        "_HighWord_e__Union",
-        "_Bytes_e__Struct",
-        "_Bits_e__Struct",
-        "_Misc_e__Union",
-        "_Values_e__Union",
-        "_Value_e__Union",
-        "_value_e__Union",
-        "_Anonymous4_e__Union",
-        "_Anonymous5_e__Union",
-        "_Anonymous6_e__Union",
-        "_Anonymous7_e__Union",
-        "_Anonymous8_e__Union",
-        "_MftWritesUserLevel_e__Struct",
-        "_Mft2WritesUserLevel_e__Struct",
-        "_BitmapWritesUserLevel_e__Struct",
-        "_MftBitmapWritesUserLevel_e__Struct",
-        "_Allocate_e__Struct",
-        "_Version1_e__Struct",
-        "_Version2_e__Struct",
-        "_Version3_e__Struct",
-        "_Class_e__Struct",
-        "_VersionDetail_e__Struct",
-        "_data_e__Union",
-        "_bmAttributes_e__Union",
-        "_FetchData_e__Struct",
-        "_Data_e__Struct",
-        "_Range_e__Struct",
-        "_NotRange_e__Struct",
-        "_Type_e__Union",
-        "_MiniFilter_e__Struct",
-        "_LegacyFilter_e__Struct",
-        "_Header_e__Union",
-        "_Version_e__Union",
-        "_Timecode_e__Struct",
-        "_RawAVC_e__Struct",
-        "_arguments_e__Union",
-        "_Info_e__Union",
-        "_s_e__Struct",
-        "_Attribute_e__Union",
-        "_Target_e__Struct",
-        "_Bounds_e__Union",
-        "_Metrics_e__Union",
-        "_lfFont_e__Union",
-        "_Handles_e__Union",
-        "_DeviceInterface_e__Struct",
-        "_DeviceHandle_e__Struct",
-        "_DeviceInstance_e__Struct",
-        "_Error_e__Struct",
-        "_S_un_e__Union",
-        "_Event_e__Struct",
-        "_irdaAttribute_e__Union",
-        "_irdaAttribOctetSeq_e__Struct",
-        "_irdaAttribUsrStr_e__Struct",
-        "_out_e__Struct",
     };
 }

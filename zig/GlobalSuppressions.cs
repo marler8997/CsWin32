@@ -68,3 +68,4 @@ using System.Diagnostics.CodeAnalysis;
 [assembly: SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1601:Partial elements should be documented", Justification = "This code will be ported to Zig", Scope = "module")]
 [assembly: SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "This code will be ported to Zig", Scope = "module")]
 [assembly: SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1400:Access modifier should be declared", Justification = "This code will be ported to Zig", Scope = "module")]
+[assembly: SuppressMessage("StyleCop.CSharp.ReadabilityRules", "SA1122:Use string.Empty for empty strings", Justification = "This code will be ported to Zig", Scope = "module")]

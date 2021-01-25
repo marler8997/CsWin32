@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Diagnostics;
+using System.IO;
 using System.Reflection.Metadata;
 using System.Text;
 
@@ -11,16 +13,13 @@ public static partial class ZigWin32
     // Implements the ISignatureTypeProvider interface used as a callback by MetadataReader to create objects that represent types.
     class TypeRefDecoder : ISignatureTypeProvider<TypeRef, INothing?>
     {
-        readonly Dictionary<string, TypeGenInfo> no_namespace_type_map;
         readonly Dictionary<string, Api> api_namespace_map;
         readonly Dictionary<TypeDefinitionHandle, TypeGenInfo> type_map;
 
         public TypeRefDecoder(
-            Dictionary<string, TypeGenInfo> no_namespace_type_map,
             Dictionary<string, Api> api_namespace_map,
             Dictionary<TypeDefinitionHandle, TypeGenInfo> type_map)
         {
-            this.no_namespace_type_map = no_namespace_type_map;
             this.api_namespace_map = api_namespace_map;
             this.type_map = type_map;
         }
@@ -88,31 +87,70 @@ public static partial class ZigWin32
 
         public TypeRef GetTypeFromReference(MetadataReader mr, TypeReferenceHandle handle, byte rawTypeKind)
         {
-            TypeReference type_ref = mr.GetTypeReference(handle);
-            string @namespace = mr.GetString(type_ref.Namespace);
-            string name = mr.GetString(type_ref.Name);
-            if (@namespace.Length == 0)
-            {
-                return new TypeRef.User(this.no_namespace_type_map[name]);
-            }
+            var type_ref = mr.GetTypeReference(handle);
+            var @namespace = mr.GetString(type_ref.Namespace);
+            var name = mr.GetString(type_ref.Name);
 
-            // This occurs for System.Guid, not sure if it is supposed to
-            if (@namespace == "System")
+            if (!type_ref.ResolutionScope.IsNil)
             {
-                if (name != "Guid")
+                if (type_ref.ResolutionScope.Kind == HandleKind.ModuleDefinition)
                 {
-                    throw new InvalidOperationException(); // if this happens, new System types have unexpectedly been added
+                    var api = this.api_namespace_map[@namespace];
+                    return new TypeRef.User(api.types[api.type_name_fqn_map[name]]);
                 }
-                return new TypeRef.Unhandled(@namespace, name);
+                else if (type_ref.ResolutionScope.Kind == HandleKind.TypeReference)
+                {
+                    TypeGenInfo enclosing_type_ref = this.resolveEnclosingType(mr, (TypeReferenceHandle)type_ref.ResolutionScope);
+                    Debug.Assert(@namespace.Length == 0, "I thought all nested types had empty namespaces");
+                    return new TypeRef.User(enclosing_type_ref.getNestedTypeByName(name));
+                }
+                else if (type_ref.ResolutionScope.Kind == HandleKind.AssemblyReference)
+                {
+                    // This occurs for System.Guid, not sure if it is supposed to
+                    if (@namespace == "System")
+                    {
+                        if (name == "Guid")
+                        {
+                            return TypeRef.Guid.Instance;
+                        }
+                    }
+                    throw new InvalidOperationException();
+                }
             }
-
-            Api api = this.api_namespace_map[@namespace];
-            return new TypeRef.User(api.types[api.type_name_fqn_map[name]]);
+            throw new InvalidDataException(string.Format(
+                "unexpected type reference resolution scope IsNil {0} and/or Kind {1}",
+                type_ref.ResolutionScope.IsNil,
+                type_ref.ResolutionScope.Kind));
         }
 
         public TypeRef GetTypeFromSpecification(MetadataReader mr, INothing? genericContext, TypeSpecificationHandle handle, byte rawTypeKind)
         {
             throw new NotImplementedException();
+        }
+
+        private TypeGenInfo resolveEnclosingType(MetadataReader mr, TypeReferenceHandle type_ref_handle)
+        {
+            var type_ref = mr.GetTypeReference(type_ref_handle);
+            var @namespace = mr.GetString(type_ref.Namespace);
+            var name = mr.GetString(type_ref.Name);
+
+            if (!type_ref.ResolutionScope.IsNil)
+            {
+                if (type_ref.ResolutionScope.Kind == HandleKind.ModuleDefinition)
+                {
+                    Api api = this.api_namespace_map[@namespace];
+                    return api.types[api.type_name_fqn_map[name]];
+                }
+
+                if (type_ref.ResolutionScope.Kind == HandleKind.TypeReference)
+                {
+                    TypeGenInfo enclosing_type_ref = this.resolveEnclosingType(mr, (TypeReferenceHandle)type_ref.ResolutionScope);
+                    Debug.Assert(@namespace.Length == 0, "I thought all nested types had empty namespaces");
+                    return enclosing_type_ref.getNestedTypeByName(name);
+                }
+            }
+
+            throw new NotImplementedException("unexpected ResolutionScope for enclosing type");
         }
     }
 
@@ -128,7 +166,7 @@ public static partial class ZigWin32
 
     abstract class TypeRef
     {
-        public abstract void addTypeRefs(TypeGenInfoSet type_refs);
+        public abstract void addTypeRefs(TypeRefScope scope);
 
         public abstract void formatZigType(StringBuilder builder, DepthContext depth_context);
 
@@ -143,9 +181,9 @@ public static partial class ZigWin32
                 this.shape = shape;
             }
 
-            public override void addTypeRefs(TypeGenInfoSet type_refs)
+            public override void addTypeRefs(TypeRefScope scope)
             {
-                this.element_type.addTypeRefs(type_refs);
+                this.element_type.addTypeRefs(scope);
             }
 
             public override void formatZigType(StringBuilder builder, DepthContext depth_context)
@@ -165,9 +203,9 @@ public static partial class ZigWin32
                 this.target_type = target_type;
             }
 
-            public override void addTypeRefs(TypeGenInfoSet type_refs)
+            public override void addTypeRefs(TypeRefScope scope)
             {
-                this.target_type.addTypeRefs(type_refs);
+                this.target_type.addTypeRefs(scope);
             }
 
             public override void formatZigType(StringBuilder builder, DepthContext depth_context)
@@ -188,9 +226,9 @@ public static partial class ZigWin32
                 this.target_type = target_type;
             }
 
-            public override void addTypeRefs(TypeGenInfoSet type_refs)
+            public override void addTypeRefs(TypeRefScope scope)
             {
-                this.target_type.addTypeRefs(type_refs);
+                this.target_type.addTypeRefs(scope);
             }
 
             public override void formatZigType(StringBuilder builder, DepthContext depth_context)
@@ -211,9 +249,9 @@ public static partial class ZigWin32
                 this.info = info;
             }
 
-            public override void addTypeRefs(TypeGenInfoSet type_refs)
+            public override void addTypeRefs(TypeRefScope scope)
             {
-                type_refs.addOrVerifyEqual(this.info);
+                scope.addTypeRef(this.info);
             }
 
             public override void formatZigType(StringBuilder builder, DepthContext depth_context)
@@ -232,7 +270,7 @@ public static partial class ZigWin32
                 this.code = code;
             }
 
-            public override void addTypeRefs(TypeGenInfoSet type_refs)
+            public override void addTypeRefs(TypeRefScope scope)
             {
             }
 
@@ -265,25 +303,23 @@ public static partial class ZigWin32
             }
         }
 
-        public class Unhandled : TypeRef
+        public class Guid : TypeRef
         {
-            public readonly string @namespace;
-            public readonly string name;
+            public static Guid Instance = new Guid();
 
-            // TODO: use lookup table instead?
-            public Unhandled(string @namespace, string name)
+            private Guid()
             {
-                this.@namespace = @namespace;
-                this.name = name;
             }
 
-            public override void addTypeRefs(TypeGenInfoSet type_refs)
+            public override void addTypeRefs(TypeRefScope scope)
             {
+                // TODO: add a type reference for guid!!
             }
 
             public override void formatZigType(StringBuilder builder, DepthContext depth_context)
             {
-                builder.AppendFormat("extern struct {{ unhandled_type: [*]const u8 = \"{0}.{1}\" }}", this.@namespace, this.name);
+                // todo: use an actual type for a guid?
+                builder.AppendFormat("[16]u8");
             }
         }
     }
