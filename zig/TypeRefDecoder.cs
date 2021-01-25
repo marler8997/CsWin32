@@ -188,8 +188,9 @@ public static partial class ZigWin32
 
             public override void formatZigType(StringBuilder builder, DepthContext depth_context)
             {
+                // TODO: can the array pointer be null?  for now I'm assuming all can.
                 // TODO: take ArrayShape into account
-                builder.Append("[*]");
+                builder.Append("?[*]");
                 this.element_type.formatZigType(builder, DepthContext.child);
             }
         }
@@ -233,8 +234,9 @@ public static partial class ZigWin32
 
             public override void formatZigType(StringBuilder builder, DepthContext depth_context)
             {
+                // TODO: can the pointer be null?  for now I'm assuming all can.
                 // TODO: do I need to surround it with parens?
-                builder.Append("*(");
+                builder.Append("?*(");
                 this.target_type.formatZigType(builder, DepthContext.child);
                 builder.Append(')');
             }
@@ -294,8 +296,8 @@ public static partial class ZigWin32
                     PrimitiveTypeCode.Double    => "f64",
                     PrimitiveTypeCode.String    => "[]const u8",
                     PrimitiveTypeCode.TypedReference => "??TypedReference???",
-                    PrimitiveTypeCode.IntPtr    => "isize",
-                    PrimitiveTypeCode.UIntPtr   => "usize",
+                    PrimitiveTypeCode.IntPtr    => "?*opaque{}",
+                    PrimitiveTypeCode.UIntPtr   => "?*opaque{}",
                     PrimitiveTypeCode.Object    => "???Object???",
     #pragma warning restore SA1025 // Code should not contain multiple whitespace in a row
                     _ => throw new InvalidOperationException(),
