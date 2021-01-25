@@ -213,7 +213,7 @@ test """" {
             {
                 foreach (MethodDefinitionHandle func_handle in api.funcs)
                 {
-                    this.GenerateFunction(out_file, type_refs, func_handle);
+                    this.generateFunc(out_file, type_refs, func_handle);
                     func_count++;
                 }
             }
@@ -494,11 +494,25 @@ test """" {
             throw new InvalidDataException("Unsupported attribute constructor kind: " + attr.Constructor.Kind);
         }
 
-        void GenerateFunction(StreamWriter out_file, TypeGenInfoSet type_refs, MethodDefinitionHandle func_handle)
+        void generateFunc(StreamWriter out_file, TypeGenInfoSet type_refs, MethodDefinitionHandle func_handle)
         {
             MethodDefinition func_def = this.mr.GetMethodDefinition(func_handle);
             string func_name = this.mr.GetString(func_def.Name);
-            out_file.WriteLine("pub extern \"c\" fn {0}() void; // TODO: generate this correctly", func_name);
+
+            // Looks like right now all the functions have these same attributes
+            DecodedMethodAttributes decoded_attrs = new DecodedMethodAttributes(func_def.Attributes);
+            assertData(decoded_attrs.member_access == MemberAccess.@public);
+            assertData(decoded_attrs.is_static);
+            assertData(!decoded_attrs.is_final);
+            assertData(!decoded_attrs.is_virtual);
+            assertData(!decoded_attrs.is_abstract);
+            assertData(!decoded_attrs.pinvoke_impl);
+            assertData(decoded_attrs.hide_by_sig);
+            assertData(!decoded_attrs.new_slot);
+            assertData(!decoded_attrs.special_name);
+            assertData(!decoded_attrs.check_access_on_override);
+
+            out_file.WriteLine("pub extern \"todo\" fn {0}() void; // TODO: generate this correctly", func_name);
         }
     }
 
