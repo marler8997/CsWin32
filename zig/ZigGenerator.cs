@@ -230,8 +230,8 @@ test """" {
             foreach (TypeGenInfo type_info in api.top_level_types)
             {
                 this.cancel_token.ThrowIfCancellationRequested();
-                this.GenerateType(out_file, type_refs, type_info);
-                type_count += 1;
+                this.generateType(out_file, type_refs, type_info);
+                type_count += 1; // TODO: will I need more branch eval quota if there were nested types?
                 unicode_set.registerSymbol(type_info.name);
             }
             out_file.WriteLine();
@@ -455,7 +455,31 @@ test """" {
             }
         }
 
-        void GenerateType(StreamWriter out_file, TypeGenInfoSet type_refs, TypeGenInfo type_info)
+        void generateType(StreamWriter out_file, TypeGenInfoSet type_refs, TypeGenInfo type_info)
+        {
+            var inside_type = this.generateTypeInner(out_file, type_refs, type_info);
+            if (!inside_type)
+            {
+                assertData(type_info.def.GetMethods().Count == 0);
+                assertData(type_info.nestedTypeCount() == 0);
+            }
+            else
+            {
+                foreach (MethodDefinitionHandle method_def_handle in type_info.def.GetMethods())
+                {
+                    MethodDefinition method_def = this.mr.GetMethodDefinition(method_def_handle);
+                    out_file.WriteLine("    // TODO: Method '{0}'", this.mr.GetString(method_def.Name));
+                }
+                foreach (TypeGenInfo nested_type in type_info.nestedTypes())
+                {
+                    out_file.WriteLine("    pub const {0} = *opaque{{}}; // TODO: generate this nested type", nested_type.name);
+                }
+                out_file.WriteLine("};");
+            }
+        }
+
+        // returns true we generated a container type and it still needs to be ended
+        bool generateTypeInner(StreamWriter out_file, TypeGenInfoSet type_refs, TypeGenInfo type_info)
         {
             out_file.WriteLine("// --------------------------------------------------------");
             out_file.WriteLine("// Type: {0}", type_info.name);
@@ -465,7 +489,7 @@ test """" {
             assertData(attrs.visibility == TypeVisibility.@public);
             assertData(attrs.is_abstract == !attrs.is_sealed);
             assertData(attrs.is_abstract == attrs.is_interface);
-            out_file.WriteLine("// TypeLayout: {0}", attrs.layout);
+            out_file.WriteLine("// TypeLayoutAttr: {0}", attrs.layout);
 
             TypeGenInfo? optional_declaring_type = null;
             if (type_info.def.IsNested)
@@ -479,30 +503,24 @@ test """" {
                 Debug.Assert(type_info.def.GetDeclaringType().IsNil, "unexpected data");
                 out_file.WriteLine("// DeclaringType: <null>");
             }
-            /*
-             * TODO: look at these Methods on TypeDefinition as well
-            type_info.def.GetDeclarativeSecurityAttributes()
-            public EventDefinitionHandleCollection GetEvents();
-            public FieldDefinitionHandleCollection GetFields();
-            public GenericParameterHandleCollection GetGenericParameters();
-            public InterfaceImplementationHandleCollection GetInterfaceImplementations();
-            public TypeLayout GetLayout();
-            public MethodImplementationHandleCollection GetMethodImplementations();
-            public MethodDefinitionHandleCollection GetMethods();
-            // Summary:
-            //     Returns an array of types nested in the specified type.
-            // Returns:
-            //     An immutable array of type definition handles that represent types nested in
-            //     the specified type.
-            public ImmutableArray<TypeDefinitionHandle> GetNestedTypes();
-            public PropertyDefinitionHandleCollection GetProperties();
-            */
+            assertData(type_info.def.GetDeclarativeSecurityAttributes().Count == 0);
+            assertData(type_info.def.GetEvents().Count == 0);
+            assertData(type_info.def.GetGenericParameters().Count == 0);
+            assertData(type_info.def.GetMethodImplementations().Count == 0);
+            assertData(type_info.def.GetProperties().Count == 0);
+            assertData(type_info.def.GetNestedTypes().Length == type_info.nestedTypeCount());
 
+            if (!attrs.is_abstract)
+            {
+                // TODO: handle these InterfaceImplementations when I implement abstract types
+                assertData(type_info.def.GetInterfaceImplementations().Count == 0);
+            }
 
+            TypeLayout type_layout = type_info.def.GetLayout();
             string? skip_because = null;
             if (attrs.is_abstract)
             {
-                skip_because = "its an abstract type";
+                skip_because = "its an abstract type (probably a COM type?)";
             }
             else if (attrs.layout == TypeLayout2.@explicit)
             {
@@ -512,16 +530,24 @@ test """" {
             {
                 skip_because = "it has an 'auto' layout (follow up on https://github.com/microsoft/win32metadata/issues/188)";
             }
+            else if (!type_layout.IsDefault || type_layout.PackingSize != 0 || type_layout.Size != 0)
+            {
+                skip_because = string.Format(
+                    "it has a non-default layout IsDefault={0} PackingSize={1} Size={2}",
+                    type_layout.IsDefault,
+                    type_layout.PackingSize,
+                    type_layout.Size);
+            }
 
             if (skip_because != null)
             {
-                out_file.WriteLine("// not generate proper code for this type because {0}", skip_because);
+                out_file.WriteLine("// not generating the actual code for this type because {0}", skip_because);
                 if (type_info.nestedTypeCount() != 0)
                 {
                     out_file.WriteLine("// WARNING: this type we are skipping has nested types!");
                 }
-                out_file.WriteLine("pub const {0} = *opaque{{}};", type_info.name);
-                return;
+                out_file.WriteLine("pub const {0} = *opaque{{", type_info.name);
+                return true;
             }
 
             string? optional_type_guid = null;
@@ -534,11 +560,9 @@ test """" {
                 {
                     optional_type_guid = guid_attr.value;
                 }
-                else if (attr is BasicTypeAttr.RaiiFree)
+                else if (attr is BasicTypeAttr.RaiiFree raii_attr)
                 {
-                    Console.WriteLine("RaiiFree: {0}", type_info.name);
-
-                    // TODO: what to do with this?
+                    out_file.WriteLine("// RAIIFree '{0}' (TODO: can we use this information?)", raii_attr.free_func);
                 }
                 else if (attr is BasicTypeAttr.NativeTypedef)
                 {
@@ -546,7 +570,7 @@ test """" {
                 }
                 else
                 {
-                    throw new InvalidOperationException();
+                    assertData(false);
                 }
             }
 
@@ -560,17 +584,15 @@ test """" {
                 string target_def_zig = addTypeRef(TypeRefScope.init(type_refs, type_info), target_def.DecodeSignature(this.type_ref_decoder, null));
                 out_file.WriteLine("pub const {0} = {1};", escapeZigId(type_info.name), target_def_zig);
                 assertData(type_info.nestedTypeCount() == 0);
-                return;
+                return false; // not a container type
             }
 
             out_file.WriteLine("// TODO: I think this is a struct, but not sure at this point, assuming it is for now");
             if (type_info.def.GetFields().Count == 0)
             {
-                out_file.WriteLine(
-                    "pub const {0} = opaque {{ }}; // a struct with no fields? this means Zig can't use it in extern structs, so we're making it opaque",
-                    type_info.name);
-                assertTemp(type_info.nestedTypeCount() == 0);
-                return;
+                out_file.WriteLine("// a struct with no fields? this means Zig can't use it in extern structs, so we're making it opaque");
+                out_file.WriteLine("pub const {0} = opaque {{", type_info.name);
+                return true; // we are inside this container type
             }
             else
             {
@@ -581,13 +603,7 @@ test """" {
                     string field_type_zig = addTypeRef(TypeRefScope.init(type_refs, type_info), field_def.DecodeSignature(this.type_ref_decoder, null));
                     out_file.WriteLine("    {0}: {1},", escapeZigId(this.mr.GetString(field_def.Name)), field_type_zig);
                 }
-
-                foreach (TypeGenInfo nested_type in type_info.nestedTypes())
-                {
-                    out_file.WriteLine("    pub const {0} = *opaque{{}}; // TODO: generate this nested type", nested_type.name);
-                }
-
-                out_file.WriteLine("};");
+                return true; // we are inside the struct type
             }
         }
 
