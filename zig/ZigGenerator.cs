@@ -258,7 +258,7 @@ test """" {
             }
             out_file.WriteLine();
             out_file.WriteLine("//");
-            out_file.WriteLine("// Ansi/Wide Symbol Aliases");
+            out_file.WriteLine("// Unicode Symbol Aliases");
             out_file.WriteLine("//");
             out_file.WriteLine("pub usingnamespace switch (@import(\"../zig.zig\").unicode_mode) {");
             out_file.WriteLine("    .ansi => struct {");
@@ -477,7 +477,6 @@ test """" {
                 Debug.Assert(type_info.def.GetDeclaringType().IsNil, "unexpected data");
                 out_file.WriteLine("// DeclaringType: <null>");
             }
-
             /*
              * TODO: look at these Methods on TypeDefinition as well
             type_info.def.GetDeclarativeSecurityAttributes()
@@ -627,7 +626,7 @@ test """" {
                 enforceAttrNamedArgCount(attr_name, attr_args, 0);
                 return new BasicTypeAttr.NativeTypedef();
             }
-            throw new NotImplementedException(string.Format("uhandled custom attr \"{0}\", \"{1}\"", attr_name.@namespace, attr_name.name));
+            throw new NotImplementedException(string.Format("uhandled custom type attribute \"{0}\", \"{1}\"", attr_name.@namespace, attr_name.name));
         }
 
         static NamespaceAndName getAttrTypeName(MetadataReader mr, CustomAttribute attr)
@@ -661,16 +660,38 @@ test """" {
             assertData(!decoded_attrs.is_final);
             assertData(!decoded_attrs.is_virtual);
             assertData(!decoded_attrs.is_abstract);
-            assertData(!decoded_attrs.pinvoke_impl);
+            assertData(decoded_attrs.pinvoke_impl);
             assertData(decoded_attrs.hide_by_sig);
             assertData(!decoded_attrs.new_slot);
             assertData(!decoded_attrs.special_name);
             assertData(!decoded_attrs.check_access_on_override);
-            out_file.WriteLine();
-            out_file.WriteLine("pub extern \"todo\" fn {0}(", func_name);
+            assertData(func_def.GetCustomAttributes().Count == 0);
+            assertData(func_def.GetDeclarativeSecurityAttributes().Count == 0);
+            assertData(func_def.ImplAttributes == MethodImplAttributes.PreserveSig);
+
+            MethodImport method_import = func_def.GetImport();
+            DecodedMethodImportAttributes method_import_attrs = new DecodedMethodImportAttributes(method_import.Attributes);
+            assertData(method_import_attrs.exact_spelling);
+            assertData(method_import_attrs.char_set == CharSet.none);
+            assertData(method_import_attrs.best_fit == null);
+            assertData(method_import_attrs.call_conv == CallConv.winapi);
+            assertData(method_import_attrs.throw_on_unmappable_char == null);
+
+            assertData(this.mr.GetString(method_import.Name) == func_name);
+
+            ModuleReference module_ref = this.mr.GetModuleReference(method_import.Module);
+            assertData(module_ref.GetCustomAttributes().Count == 0);
+            string import_name = this.mr.GetString(module_ref.Name);
 
             MethodSignature<TypeRef> method_sig = func_def.DecodeSignature(this.type_ref_decoder, null);
 
+            assertData(method_sig.Header.Kind == SignatureKind.Method);
+            assertData(method_sig.Header.CallingConvention == SignatureCallingConvention.Default);
+            assertData(method_sig.Header.Attributes == SignatureAttributes.None);
+
+            out_file.WriteLine();
+            out_file.WriteLine("// set_last_errror={0} (can and should we use this?)", method_import_attrs.set_last_error);
+            out_file.WriteLine("pub extern \"{0}\" fn {1}(", import_name, func_name);
             int next_expected_sequence_number = 1;
             foreach (ParameterHandle param_handle in func_def.GetParameters())
             {
@@ -1106,34 +1127,40 @@ test """" {
 
         public DecodedTypeAttributes(TypeAttributes attrs)
         {
-            TypeAttributes visibility_attr = attrs & TypeAttributes.VisibilityMask;
-            this.visibility = visibility_attr switch
             {
-                TypeAttributes.NotPublic => TypeVisibility.not_public,
-                TypeAttributes.Public => TypeVisibility.@public,
-                TypeAttributes.NestedPublic => TypeVisibility.nested_public,
-                TypeAttributes.NestedPrivate => TypeVisibility.nested_private,
-                TypeAttributes.NestedFamANDAssem => TypeVisibility.nested_fam_and_assem,
-                TypeAttributes.NestedAssembly => TypeVisibility.nested_assembly,
-                TypeAttributes.NestedFamily => TypeVisibility.nested_family,
-                TypeAttributes.NestedFamORAssem => TypeVisibility.nested_fam_or_assem,
-                _ => throw new InvalidDataException(string.Format("unknown TypeAttribute visibility {0}", visibility_attr)),
-            };
-            TypeAttributes layout_attr = attrs & TypeAttributes.LayoutMask;
-            this.layout = layout_attr switch
+                TypeAttributes visibility_attr = attrs & TypeAttributes.VisibilityMask;
+                this.visibility = visibility_attr switch
+                {
+                    TypeAttributes.NotPublic => TypeVisibility.not_public,
+                    TypeAttributes.Public => TypeVisibility.@public,
+                    TypeAttributes.NestedPublic => TypeVisibility.nested_public,
+                    TypeAttributes.NestedPrivate => TypeVisibility.nested_private,
+                    TypeAttributes.NestedFamANDAssem => TypeVisibility.nested_fam_and_assem,
+                    TypeAttributes.NestedAssembly => TypeVisibility.nested_assembly,
+                    TypeAttributes.NestedFamily => TypeVisibility.nested_family,
+                    TypeAttributes.NestedFamORAssem => TypeVisibility.nested_fam_or_assem,
+                    _ => throw new InvalidDataException(string.Format("unknown TypeAttribute visibility {0}", visibility_attr)),
+                };
+            }
             {
-                TypeAttributes.AutoLayout => TypeLayout2.@auto,
-                TypeAttributes.SequentialLayout => TypeLayout2.sequential,
-                TypeAttributes.ExplicitLayout => TypeLayout2.@explicit,
-                _ => throw new InvalidDataException(string.Format("unknown TypeAttribute layout {0}", layout_attr)),
-            };
-            TypeAttributes class_semantics_attr = attrs & TypeAttributes.ClassSemanticsMask;
-            this.class_semantics = class_semantics_attr switch
+                TypeAttributes layout_attr = attrs & TypeAttributes.LayoutMask;
+                this.layout = layout_attr switch
+                {
+                    TypeAttributes.AutoLayout => TypeLayout2.@auto,
+                    TypeAttributes.SequentialLayout => TypeLayout2.sequential,
+                    TypeAttributes.ExplicitLayout => TypeLayout2.@explicit,
+                    _ => throw new InvalidDataException(string.Format("unknown TypeAttribute layout {0}", layout_attr)),
+                };
+            }
             {
-                TypeAttributes.Class => TypeClassSemantics.@class,
-                TypeAttributes.Interface => TypeClassSemantics.@interface,
-                _ => throw new InvalidDataException(string.Format("unknown TypeAttribute class semantics {0}", class_semantics_attr)),
-            };
+                TypeAttributes class_semantics_attr = attrs & TypeAttributes.ClassSemanticsMask;
+                this.class_semantics = class_semantics_attr switch
+                {
+                    TypeAttributes.Class => TypeClassSemantics.@class,
+                    TypeAttributes.Interface => TypeClassSemantics.@interface,
+                    _ => throw new InvalidDataException(string.Format("unknown TypeAttribute class semantics {0}", class_semantics_attr)),
+                };
+            }
             this.is_abstract = (attrs & TypeAttributes.Abstract) != 0;
             this.is_sealed = (attrs & TypeAttributes.Sealed) != 0;
         }
