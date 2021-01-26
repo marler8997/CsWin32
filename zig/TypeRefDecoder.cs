@@ -114,6 +114,13 @@ public static partial class ZigWin32
                             return TypeRef.Guid.Instance;
                         }
                     }
+                    else if (@namespace == "Windows.System")
+                    {
+                        if (name == "DispatcherQueueController")
+                        {
+                            return new TypeRef.UnhandledClrType(@namespace, name);
+                        }
+                    }
                     throw new InvalidOperationException();
                 }
             }
@@ -211,10 +218,9 @@ public static partial class ZigWin32
 
             public override void formatZigType(StringBuilder builder, DepthContext depth_context)
             {
-                // TODO: do I need to surround it with parens?
-                builder.Append("*(");
+                // TODO: do I need to surround the target type with parens?
+                builder.Append('*');
                 this.target_type.formatZigType(builder, DepthContext.child);
-                builder.Append(')');
             }
         }
 
@@ -234,11 +240,10 @@ public static partial class ZigWin32
 
             public override void formatZigType(StringBuilder builder, DepthContext depth_context)
             {
-                // TODO: can the pointer be null?  for now I'm assuming all can.
-                // TODO: do I need to surround it with parens?
-                builder.Append("?*(");
+                // TODO: create a better pointer type
+                // TODO: do I need to surround the target type with parens?
+                builder.Append("?*");
                 this.target_type.formatZigType(builder, DepthContext.child);
-                builder.Append(')');
             }
         }
 
@@ -315,13 +320,35 @@ public static partial class ZigWin32
 
             public override void addTypeRefs(TypeRefScope scope)
             {
+                scope.module_type_refs.contains_system_guid = true;
+            }
+
+            public override void formatZigType(StringBuilder builder, DepthContext depth_context)
+            {
+                builder.Append("Guid");
+            }
+        }
+
+        public class UnhandledClrType : TypeRef
+        {
+            readonly string @namespace;
+            readonly string name;
+
+            public UnhandledClrType(string @namespace, string name)
+            {
+                this.@namespace = @namespace;
+                this.name = name;
+            }
+
+            public override void addTypeRefs(TypeRefScope scope)
+            {
                 // TODO: add a type reference for guid!!
             }
 
             public override void formatZigType(StringBuilder builder, DepthContext depth_context)
             {
                 // todo: use an actual type for a guid?
-                builder.AppendFormat("[16]u8");
+                builder.AppendFormat("*opaque{{ pub const actual_type = \"{0}\"; }}", this.@namespace, this.name);
             }
         }
     }
