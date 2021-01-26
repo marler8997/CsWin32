@@ -462,8 +462,10 @@ test """" {
             assertVariant(!type_info.def.IsNested, "generateType should not be called with nested types...yet");
 
             DecodedTypeAttributes attrs = new DecodedTypeAttributes(type_info.def.Attributes);
-
-            out_file.WriteLine("// Attributes: {0}", attrs);
+            assertData(attrs.visibility == TypeVisibility.@public);
+            assertData(attrs.is_abstract == !attrs.is_sealed);
+            assertData(attrs.is_abstract == attrs.is_interface);
+            out_file.WriteLine("// TypeLayout: {0}", attrs.layout);
 
             TypeGenInfo? optional_declaring_type = null;
             if (type_info.def.IsNested)
@@ -496,22 +498,11 @@ test """" {
             public PropertyDefinitionHandleCollection GetProperties();
             */
 
+
             string? skip_because = null;
-            if (type_info.def.IsNested)
-            {
-                skip_because = "its a nested type";
-            }
-            else if (attrs.is_abstract)
+            if (attrs.is_abstract)
             {
                 skip_because = "its an abstract type";
-            }
-            else if (attrs.visibility != TypeVisibility.@public)
-            {
-                skip_because = "its a non-public type";
-            }
-            else if (!attrs.is_sealed)
-            {
-                skip_because = "its a non-sealed type";
             }
             else if (attrs.layout == TypeLayout2.@explicit)
             {
@@ -519,11 +510,7 @@ test """" {
             }
             else if (attrs.layout == TypeLayout2.@auto)
             {
-                skip_because = "it has an 'auto' layout";
-            }
-            else if (attrs.class_semantics == TypeClassSemantics.@interface)
-            {
-                skip_because = "it is an interface type";
+                skip_because = "it has an 'auto' layout (follow up on https://github.com/microsoft/win32metadata/issues/188)";
             }
 
             if (skip_because != null)
@@ -1121,7 +1108,7 @@ test """" {
     {
         public readonly TypeVisibility visibility;
         public readonly TypeLayout2 layout;
-        public readonly TypeClassSemantics class_semantics;
+        public readonly bool is_interface;
         public readonly bool is_abstract;
         public readonly bool is_sealed;
 
@@ -1152,15 +1139,7 @@ test """" {
                     _ => throw new InvalidDataException(string.Format("unknown TypeAttribute layout {0}", layout_attr)),
                 };
             }
-            {
-                TypeAttributes class_semantics_attr = attrs & TypeAttributes.ClassSemanticsMask;
-                this.class_semantics = class_semantics_attr switch
-                {
-                    TypeAttributes.Class => TypeClassSemantics.@class,
-                    TypeAttributes.Interface => TypeClassSemantics.@interface,
-                    _ => throw new InvalidDataException(string.Format("unknown TypeAttribute class semantics {0}", class_semantics_attr)),
-                };
-            }
+            this.is_interface = (attrs & TypeAttributes.Interface) != 0;
             this.is_abstract = (attrs & TypeAttributes.Abstract) != 0;
             this.is_sealed = (attrs & TypeAttributes.Sealed) != 0;
         }
@@ -1168,11 +1147,11 @@ test """" {
         public override string ToString()
         {
             return string.Format(
-                "Visibility={0} Layout={1} ClassSemantics={2} Abstract={3} Sealed={4}",
+                "Visibility={0} Layout={1}{2}{3} Sealed={4}",
                 this.visibility,
                 this.layout,
-                this.class_semantics,
-                this.is_abstract,
+                this.is_interface ? " Interface" : "",
+                this.is_abstract ? " Abstract" : "",
                 this.is_sealed);
         }
     }
