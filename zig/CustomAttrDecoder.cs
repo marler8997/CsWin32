@@ -18,11 +18,15 @@ public static partial class ZigWin32
 
         public CustomAttrType GetPrimitiveType(PrimitiveTypeCode code)
         {
-            if (code != PrimitiveTypeCode.String)
+            if (code == PrimitiveTypeCode.Boolean)
             {
-                throw new NotImplementedException("Only String primitive types have been implemented for custom attributes");
+                return CustomAttrType.Bool.Instance;
             }
-            return CustomAttrType.Str.Instance;
+            if (code == PrimitiveTypeCode.String)
+            {
+                return CustomAttrType.Str.Instance;
+            }
+            throw new NotImplementedException("Only string and bool primitive types have been implemented for custom attributes");
         }
 
         public CustomAttrType GetSystemType() => CustomAttrType.SystemType.Instance;
@@ -42,6 +46,10 @@ public static partial class ZigWin32
                 {
                     return CustomAttrType.CallConv.Instance;
                 }
+                if (name == "UnmanagedType")
+                {
+                    return CustomAttrType.UnmanagedType.Instance;
+                }
             }
             throw new NotImplementedException();
         }
@@ -52,8 +60,11 @@ public static partial class ZigWin32
         {
             if (object.ReferenceEquals(type, CustomAttrType.CallConv.Instance))
             {
-                // !!!!!!!! TODO: is this right???? What is this doing???
-                return PrimitiveTypeCode.Int32;
+                return PrimitiveTypeCode.Int32; // !!!!!!!! TODO: is this right???? What is this doing???
+            }
+            if (object.ReferenceEquals(type, CustomAttrType.UnmanagedType.Instance))
+            {
+                return PrimitiveTypeCode.Int32; // !!!!!!!! TODO: is this right???? What is this doing???
             }
             throw new NotImplementedException();
         }
@@ -64,6 +75,13 @@ public static partial class ZigWin32
     abstract class CustomAttrType
     {
         public abstract string formatValue(object? value);
+
+        public class Bool : CustomAttrType
+        {
+            public static readonly Bool Instance = new Bool();
+
+            public override string formatValue(object? value) => string.Format("Bool({0})", value);
+        }
 
         public class CallConv : CustomAttrType
         {
@@ -84,6 +102,40 @@ public static partial class ZigWin32
             public static readonly Str Instance = new Str();
 
             public override string formatValue(object? value) => string.Format("String({0})", value);
+        }
+
+        public class UnmanagedType : CustomAttrType
+        {
+            public static readonly UnmanagedType Instance = new UnmanagedType();
+
+            public override string formatValue(object? value) => string.Format("UnmanagedType({0})", value);
+        }
+    }
+
+    class ConstantAttr
+    {
+        public static ConstantAttr Instance = new ConstantAttr();
+
+        public class NativeTypeInfo : ConstantAttr
+        {
+            public readonly UnmanagedType unmanaged_type;
+            public readonly bool is_null_terminated;
+
+            public NativeTypeInfo(UnmanagedType unmanaged_type, bool is_null_terminated)
+            {
+                this.unmanaged_type = unmanaged_type;
+                this.is_null_terminated = is_null_terminated;
+            }
+        }
+
+        public class Obsolete : ConstantAttr
+        {
+            public readonly string value;
+
+            public Obsolete(string value)
+            {
+                this.value = value;
+            }
         }
     }
 
@@ -138,6 +190,17 @@ public static partial class ZigWin32
         }
     }
 
+    static void enforceNamedArgName(NamespaceAndName name, CustomAttributeValue<CustomAttrType> args, string expected, int index)
+    {
+        string? actual = args.NamedArguments[index].Name;
+        assertData(actual == expected, string.Format(
+            "expected attribute '{0}' to have named argument at index {1} to be named '{2}' but got '{3}'",
+            name,
+            index,
+            expected,
+            actual));
+    }
+
     static string attrFixedArgAsString(CustomAttributeTypedArgument<CustomAttrType> attr_value)
     {
         if (object.ReferenceEquals(attr_value.Type, CustomAttrType.Str.Instance))
@@ -145,5 +208,23 @@ public static partial class ZigWin32
             return (string)attr_value.Value!;
         }
         throw new InvalidDataException(string.Format("expected attribute value to be a string but got '{0}'", attr_value));
+    }
+
+    static UnmanagedType attrFixedArgAsUnmanagedType(CustomAttributeTypedArgument<CustomAttrType> attr_value)
+    {
+        if (object.ReferenceEquals(attr_value.Type, CustomAttrType.UnmanagedType.Instance))
+        {
+            return (UnmanagedType)attr_value.Value!;
+        }
+        throw new InvalidDataException(string.Format("expected attribute value to be an UnmanagedType enum value, but got '{0}'", attr_value));
+    }
+
+    static bool attrNamedAsBool(CustomAttributeNamedArgument<CustomAttrType> attr_value)
+    {
+        if (object.ReferenceEquals(attr_value.Type, CustomAttrType.Bool.Instance))
+        {
+            return (bool)attr_value.Value!;
+        }
+        throw new InvalidDataException(string.Format("expected attribute value to be an bool, but got '{0}'", attr_value));
     }
 }
