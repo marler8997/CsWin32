@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net5.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Common\GlobalSuppressions.cs" Link="GlobalSuppressions.cs" />
+    <Compile Include="..\Common\JsonWin32Common.cs" Link="JsonWin32Common.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Nullable" Version="1.3.0" />
+    <PackageReference Include="System.Memory" Version="4.5.4" PrivateAssets="none" />
+  </ItemGroup>
+
+</Project>
